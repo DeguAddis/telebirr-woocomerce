@@ -29,11 +29,11 @@ export default function Home() {
       
       {/* Application Logo - LCP element with priority loading */}
       <Image
-        src="https://assets.kiloapps.io/user_7dfdef63-2ca5-4644-859f-5b3e1b9547b5/66cbad18-cb87-458c-8d2e-b8dc583dc5a1/204d3e2c-eaf3-4463-9a26-c66840e09b01.png"
-        alt="Application Logo"
+        src="https://assets.kiloapps.io/user_7dfdef63-2ca5-4644-859f-5b3e1b9547b5/66cbad18-cb87-458c-8d2e-b8dc583dc5a1/e452488d-1e8f-4775-9446-45e98db06cad.png"
+        alt="Telebirr Logo"
         width={240}
         height={240}
-        className="object-contain drop-shadow-lg"
+        className="object-contain drop-shadow-lg bg-white p-4 rounded-lg"
         priority // Critical for LCP performance score
         quality={90}
       />
