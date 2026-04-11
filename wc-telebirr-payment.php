@@ -566,3 +566,79 @@ add_action('before_woocommerce_init', function() {
         \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
     }
 });
+
+/**
+ * Disable billing fields when Telebirr is selected payment method
+ */
+add_filter('woocommerce_checkout_fields', 'wc_telebirr_disable_billing_fields', 999, 1);
+function wc_telebirr_disable_billing_fields($fields) {
+    if (isset(WC()->session) && WC()->session->get('chosen_payment_method') === 'telebirr') {
+        // Hide all billing fields except country for shipping calculation
+        $fields['billing']['billing_first_name']['required'] = false;
+        $fields['billing']['billing_last_name']['required'] = false;
+        $fields['billing']['billing_company']['required'] = false;
+        $fields['billing']['billing_address_1']['required'] = false;
+        $fields['billing']['billing_address_2']['required'] = false;
+        $fields['billing']['billing_city']['required'] = false;
+        $fields['billing']['billing_postcode']['required'] = false;
+        $fields['billing']['billing_state']['required'] = false;
+        $fields['billing']['billing_phone']['required'] = false;
+        $fields['billing']['billing_email']['required'] = false;
+        
+        // Add classes to hide fields via CSS
+        foreach ($fields['billing'] as $field_key => $field) {
+            if (!isset($fields['billing'][$field_key]['class'])) {
+                $fields['billing'][$field_key]['class'] = array();
+            }
+            $fields['billing'][$field_key]['class'][] = 'hidden-if-telebirr';
+        }
+    }
+    return $fields;
+}
+
+/**
+ * Enqueue checkout scripts for dynamic field hiding
+ */
+add_action('wp_enqueue_scripts', 'wc_telebirr_enqueue_checkout_script');
+function wc_telebirr_enqueue_checkout_script() {
+    if (is_checkout()) {
+        wc_enqueue_js("
+            jQuery(document).ready(function($) {
+                function toggleTelebirrFields() {
+                    if ($('input[name=\"payment_method\"]:checked').val() === 'telebirr') {
+                        $('.hidden-if-telebirr').closest('.form-row').hide();
+                        $('.woocommerce-billing-fields__field-wrapper').hide();
+                    } else {
+                        $('.hidden-if-telebirr').closest('.form-row').show();
+                        $('.woocommerce-billing-fields__field-wrapper').show();
+                    }
+                }
+                
+                // Initial check
+                toggleTelebirrFields();
+                
+                // Update when payment method changes
+                $('form.checkout').on('change', 'input[name=\"payment_method\"]', function() {
+                    toggleTelebirrFields();
+                    $('body').trigger('update_checkout');
+                });
+            });
+        ");
+    }
+}
+
+/**
+ * Skip billing address validation for Telebirr payments
+ */
+add_action('woocommerce_after_checkout_validation', 'wc_telebirr_skip_billing_validation', 10, 2);
+function wc_telebirr_skip_billing_validation($data, $errors) {
+    if ($data['payment_method'] === 'telebirr') {
+        // Remove all billing related errors
+        $error_codes = $errors->get_error_codes();
+        foreach ($error_codes as $code) {
+            if (str_starts_with($code, 'billing_')) {
+                $errors->remove($code);
+            }
+        }
+    }
+}
