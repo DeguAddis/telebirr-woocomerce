@@ -2,8 +2,8 @@
 /**
  * Plugin Name: WooCommerce Telebirr Payment Gateway
  * Plugin URI: https://github.com/yourusername/wc-telebirr-payment
- * Description: Telebirr mobile money payment gateway integration for WooCommerce
- * Version: 1.1.0
+ * Description: Telebirr mobile money payment gateway integration for WooCommerce (Fabric Gateway API)
+ * Version: 1.2.0
  * Author: Your Name
  * Author URI: https://yourwebsite.com
  * License: GPL v2 or later
@@ -14,6 +14,15 @@
  * Requires PHP: 7.4
  * WC requires at least: 6.0
  * WC tested up to: 8.7
+ *
+ * NOTE: This plugin requires the phpseclib/phpseclib (^3.0) library for RSA-PSS signing
+ * as required by the Telebirr H5 C2B specification. Install via:
+ *   composer require phpseclib/phpseclib:^3.0
+ *
+ * This plugin uses the Telebirr Fabric Payment Gateway API (preOrder endpoint with
+ * snake_case parameters). If you are using the original H5 C2B Web Payment API
+ * (camelCase parameters), the parameter names will differ. Confirm your API version
+ * with Telebirr support.
  */
 
 // Exit if accessed directly
@@ -37,6 +46,16 @@ add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'wc_telebirr_plug
 function wc_telebirr_init_gateway() {
     if (!class_exists('WC_Payment_Gateway')) {
         return;
+    }
+
+    // Verify phpseclib is available
+    if (!class_exists('\phpseclib3\Crypt\PublicKeyLoader')) {
+        add_action('admin_notices', function () {
+            echo '<div class="error"><p><strong>WooCommerce Telebirr:</strong> '
+                . esc_html__('The phpseclib/phpseclib (^3.0) library is required. Please run: composer require phpseclib/phpseclib:^3.0', 'wc-telebirr-payment')
+                . '</p></div>';
+        });
+        // Continue loading so settings are still accessible, but signing will fail gracefully
     }
 
     class WC_Gateway_Telebirr extends WC_Payment_Gateway {
@@ -71,6 +90,9 @@ function wc_telebirr_init_gateway() {
         /** @var string Allowed webhook IP ranges (comma-separated) */
         private $allowed_ips;
 
+        /** @var string Store/business name for receiveName field */
+        private $receive_name;
+
         /** @var WC_Logger Logger instance */
         private $logger;
 
@@ -98,6 +120,7 @@ function wc_telebirr_init_gateway() {
             $this->merchant_app_id    = $this->testmode ? $this->get_option('test_merchant_app_id') : $this->get_option('merchant_app_id');
             $this->merchant_code      = $this->testmode ? $this->get_option('test_merchant_code') : $this->get_option('merchant_code');
             $this->allowed_ips        = $this->get_option('allowed_ips', '');
+            $this->receive_name       = $this->get_option('receive_name', get_bloginfo('name'));
 
             // Load private key: prefer constant > file path > database setting
             $this->private_key        = $this->load_private_key();
@@ -162,6 +185,45 @@ function wc_telebirr_init_gateway() {
         }
 
         /**
+         * Generate a millisecond-precision Unix timestamp as required by the Telebirr spec.
+         *
+         * The official Telebirr H5 C2B spec states:
+         * "The timestamp should be in milliseconds. Use unix timestamp."
+         * Example from spec: 1624546517701
+         *
+         * @return string Millisecond timestamp as string
+         */
+        private function get_timestamp_ms() {
+            return (string) round(microtime(true) * 1000);
+        }
+
+        /**
+         * Sanitize and validate a value for use as merch_order_id (outTradeNo).
+         *
+         * Per the Telebirr spec, outTradeNo only supports digits, letters, and underscores.
+         * This method strips any disallowed characters and logs a warning if modifications were made.
+         *
+         * @param string $order_id The raw order identifier
+         * @return string Sanitized order ID safe for Telebirr
+         */
+        private function sanitize_order_id($order_id) {
+            $sanitized = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $order_id);
+
+            if ($sanitized !== (string) $order_id) {
+                $this->logger->warning(
+                    sprintf(
+                        'Order ID "%s" contained characters not allowed by Telebirr (digits, letters, underscores only). Sanitized to "%s".',
+                        $order_id,
+                        $sanitized
+                    ),
+                    array('source' => 'telebirr')
+                );
+            }
+
+            return $sanitized;
+        }
+
+        /**
          * Initialize Gateway Settings Form Fields
          */
         public function init_form_fields() {
@@ -184,6 +246,13 @@ function wc_telebirr_init_gateway() {
                     'type'        => 'textarea',
                     'description' => __('This controls the description which the user sees during checkout.', 'wc-telebirr-payment'),
                     'default'     => __('Pay securely using your Telebirr mobile money account.', 'wc-telebirr-payment'),
+                ),
+                'receive_name' => array(
+                    'title'       => __('Receiver Name', 'wc-telebirr-payment'),
+                    'type'        => 'text',
+                    'description' => __('The business/store name shown to the customer during Telebirr payment. Defaults to your site name.', 'wc-telebirr-payment'),
+                    'default'     => get_bloginfo('name'),
+                    'desc_tip'    => true,
                 ),
                 'testmode' => array(
                     'title'       => __('Test mode', 'wc-telebirr-payment'),
@@ -283,7 +352,10 @@ function wc_telebirr_init_gateway() {
                 'security' => array(
                     'title'       => __('Webhook Security', 'wc-telebirr-payment'),
                     'type'        => 'title',
-                    'description' => __('Configure additional security for webhook callbacks.', 'wc-telebirr-payment'),
+                    'description' => __(
+                        'Configure additional security for webhook callbacks. IMPORTANT: You must also register your server\'s outbound IP address with Telebirr via the developer portal — Telebirr will reject requests from unregistered IPs.',
+                        'wc-telebirr-payment'
+                    ),
                 ),
                 'allowed_ips' => array(
                     'title'       => __('Allowed Webhook IPs', 'wc-telebirr-payment'),
@@ -426,23 +498,45 @@ function wc_telebirr_init_gateway() {
         private function create_telebirr_order($order, $token) {
             $url = $this->base_url . '/payment/v1/merchant/preOrder';
             
-            $timestamp = (string) time();
+            // Use millisecond timestamp per Telebirr spec
+            $timestamp = $this->get_timestamp_ms();
             $nonce = $this->generate_nonce();
             
             $order_id = $order->get_id();
+
+            // Sanitize order ID for Telebirr (digits, letters, underscores only)
+            $merch_order_id = $this->sanitize_order_id($order_id);
             $amount = number_format($order->get_total(), 2, '.', '');
+
+            // Enforce HTTPS for notifyUrl as required by Telebirr spec
+            $notify_url = home_url('/wc-api/telebirr_callback', 'https');
+            if (strpos($notify_url, 'https://') !== 0) {
+                $this->logger->error(
+                    'Cannot generate HTTPS notify_url. Telebirr requires HTTPS for callback endpoints.',
+                    array('source' => 'telebirr')
+                );
+                return false;
+            }
+
+            // Enforce HTTPS for redirect URL
+            $redirect_url = $this->get_return_url($order);
+            if (strpos($redirect_url, 'https://') !== 0) {
+                // Attempt to force HTTPS
+                $redirect_url = preg_replace('/^http:/', 'https:', $redirect_url);
+            }
             
             $biz_content = array(
-                'notify_url'      => home_url('/wc-api/telebirr_callback'),
+                'notify_url'      => $notify_url,
                 'appid'           => $this->merchant_app_id,
                 'merch_code'      => $this->merchant_code,
-                'merch_order_id'  => (string) $order_id,
+                'merch_order_id'  => $merch_order_id,
                 'trade_type'      => 'Checkout',
-                'title'           => sprintf(__('Order #%s', 'wc-telebirr-payment'), $order_id),
+                'title'           => sprintf(__('Order #%s', 'wc-telebirr-payment'), $merch_order_id),
                 'total_amount'    => $amount,
                 'trans_currency'  => 'ETB',
                 'timeout_express' => '120m',
-                'redirect_url'    => $this->get_return_url($order),
+                'redirect_url'    => $redirect_url,
+                'receive_name'    => $this->receive_name,
             );
 
             $request = array(
@@ -453,8 +547,15 @@ function wc_telebirr_init_gateway() {
                 'biz_content' => $biz_content,
             );
 
-            // Sign the request
+            // Sign the request using RSA-PSS (SHA256, MGF1-SHA256, salt 32)
             $signature = $this->sign_request($request);
+            if (empty($signature)) {
+                $this->logger->error(
+                    sprintf('Failed to sign preOrder request for order #%d', $order_id),
+                    array('source' => 'telebirr')
+                );
+                return false;
+            }
             $request['sign'] = $signature;
             $request['sign_type'] = 'SHA256WithRSA';
 
@@ -511,7 +612,7 @@ function wc_telebirr_init_gateway() {
                 'merch_code' => $this->merchant_code,
                 'nonce_str'  => $this->generate_nonce(),
                 'prepay_id'  => $prepay_id,
-                'timestamp'  => (string) time(),
+                'timestamp'  => $this->get_timestamp_ms(),
             );
 
             $signature = $this->sign_request($params);
@@ -533,8 +634,14 @@ function wc_telebirr_init_gateway() {
         }
 
         /**
-         * Sign request using RSA-SHA256
-         * Handles both flat and nested (biz_content) parameter structures.
+         * Sign request using RSA-PSS (SHA256, MGF1-SHA256, salt length 32) as required
+         * by the Telebirr H5 C2B specification.
+         *
+         * Uses phpseclib3 for RSA-PSS support since PHP's native openssl_sign() only
+         * supports PKCS#1 v1.5 padding, not PSS.
+         *
+         * Handles both flat and nested (biz_content) parameter structures by JSON-encoding
+         * array values before including them in the signing string.
          *
          * @param array $data The request data to sign
          * @return string Base64-encoded signature, or empty string on failure
@@ -563,29 +670,190 @@ function wc_telebirr_init_gateway() {
             }
             $sign_string = implode('&', $sign_parts);
 
-            // Load private key
+            // Use phpseclib3 for RSA-PSS signing (Telebirr spec requirement)
+            if (class_exists('\phpseclib3\Crypt\PublicKeyLoader')) {
+                return $this->sign_with_phpseclib($sign_string);
+            }
+
+            // Fallback to openssl_sign with PKCS#1 v1.5 if phpseclib is not available
+            // WARNING: This may not be accepted by Telebirr in production
+            $this->logger->warning(
+                'phpseclib3 not available, falling back to PKCS#1 v1.5 signing. '
+                . 'Install phpseclib/phpseclib:^3.0 for spec-compliant RSA-PSS signatures.',
+                array('source' => 'telebirr')
+            );
+            return $this->sign_with_openssl_fallback($sign_string);
+        }
+
+        /**
+         * Sign a string using RSA-PSS via phpseclib3 (spec-compliant).
+         * Algorithm: RSA-PSS, SHA256, MGF1-SHA256, salt length 32.
+         *
+         * @param string $sign_string The string to sign
+         * @return string Base64-encoded signature, or empty string on failure
+         */
+        private function sign_with_phpseclib($sign_string) {
+            try {
+                $key = \phpseclib3\Crypt\PublicKeyLoader::load($this->private_key)
+                    ->withHash('sha256')
+                    ->withMGFHash('sha256')
+                    ->withSaltLength(32);
+
+                $signature = $key->sign($sign_string);
+                return base64_encode($signature);
+            } catch (\Exception $e) {
+                $this->logger->error(
+                    'RSA-PSS signing failed (phpseclib): ' . $e->getMessage(),
+                    array('source' => 'telebirr')
+                );
+                return '';
+            }
+        }
+
+        /**
+         * Fallback signing using PHP's native openssl_sign with PKCS#1 v1.5 padding.
+         * WARNING: This does NOT produce RSA-PSS signatures and may be rejected by Telebirr.
+         *
+         * @param string $sign_string The string to sign
+         * @return string Base64-encoded signature, or empty string on failure
+         */
+        private function sign_with_openssl_fallback($sign_string) {
             $private_key = openssl_pkey_get_private($this->private_key);
             
             if (!$private_key) {
                 $this->logger->error(
-                    'Failed to load RSA private key for signing',
+                    'Failed to load RSA private key for signing (openssl fallback)',
                     array('source' => 'telebirr')
                 );
                 return '';
             }
 
-            // Sign with RSA-SHA256
             $result = openssl_sign($sign_string, $signature, $private_key, OPENSSL_ALGO_SHA256);
 
             if (!$result) {
                 $this->logger->error(
-                    'RSA signing operation failed: ' . openssl_error_string(),
+                    'RSA signing operation failed (openssl fallback): ' . openssl_error_string(),
                     array('source' => 'telebirr')
                 );
                 return '';
             }
 
             return base64_encode($signature);
+        }
+
+        /**
+         * Verify webhook signature from Telebirr using RSA-PSS (SHA256, MGF1-SHA256, salt 32).
+         * Properly handles nested biz_content by JSON-encoding it for the signing string.
+         *
+         * @param array $data The full webhook payload
+         * @return bool True if signature is valid
+         */
+        private function verify_signature($data) {
+            if (!isset($data['sign'])) {
+                $this->logger->warning('Signature verification failed: no sign field in payload', array('source' => 'telebirr'));
+                return false;
+            }
+
+            $received_sign = base64_decode($data['sign']);
+            if ($received_sign === false) {
+                $this->logger->warning('Signature verification failed: invalid base64 in sign field', array('source' => 'telebirr'));
+                return false;
+            }
+
+            // Remove sign and sign_type from data before building verification string
+            $verify_data = $data;
+            unset($verify_data['sign']);
+            unset($verify_data['sign_type']);
+
+            // Flatten nested arrays to JSON strings (critical: includes biz_content in verification)
+            $flat_data = array();
+            foreach ($verify_data as $key => $value) {
+                if ($value === '') {
+                    continue;
+                }
+                if (is_array($value)) {
+                    $flat_data[$key] = wp_json_encode($value);
+                } else {
+                    $flat_data[$key] = $value;
+                }
+            }
+
+            // Sort parameters alphabetically
+            ksort($flat_data);
+            
+            // Build signing string
+            $sign_parts = array();
+            foreach ($flat_data as $key => $value) {
+                $sign_parts[] = $key . '=' . $value;
+            }
+            $sign_string = implode('&', $sign_parts);
+
+            // Use phpseclib3 for RSA-PSS verification (preferred)
+            if (class_exists('\phpseclib3\Crypt\PublicKeyLoader')) {
+                return $this->verify_with_phpseclib($sign_string, $received_sign);
+            }
+
+            // Fallback to openssl_verify with PKCS#1 v1.5
+            $this->logger->warning(
+                'phpseclib3 not available for verification, falling back to PKCS#1 v1.5.',
+                array('source' => 'telebirr')
+            );
+            return $this->verify_with_openssl_fallback($sign_string, $received_sign);
+        }
+
+        /**
+         * Verify a signature using RSA-PSS via phpseclib3 (spec-compliant).
+         *
+         * @param string $sign_string The original signing string
+         * @param string $signature The raw (decoded) signature bytes
+         * @return bool True if valid
+         */
+        private function verify_with_phpseclib($sign_string, $signature) {
+            try {
+                $key = \phpseclib3\Crypt\PublicKeyLoader::load($this->public_key)
+                    ->withHash('sha256')
+                    ->withMGFHash('sha256')
+                    ->withSaltLength(32);
+
+                return $key->verify($sign_string, $signature);
+            } catch (\Exception $e) {
+                $this->logger->error(
+                    'RSA-PSS verification failed (phpseclib): ' . $e->getMessage(),
+                    array('source' => 'telebirr')
+                );
+                return false;
+            }
+        }
+
+        /**
+         * Fallback signature verification using openssl_verify with PKCS#1 v1.5.
+         *
+         * @param string $sign_string The original signing string
+         * @param string $signature The raw (decoded) signature bytes
+         * @return bool True if valid
+         */
+        private function verify_with_openssl_fallback($sign_string, $signature) {
+            $public_key = openssl_pkey_get_public($this->public_key);
+            
+            if (!$public_key) {
+                $this->logger->error(
+                    'Signature verification failed: cannot load Telebirr public key (openssl fallback)',
+                    array('source' => 'telebirr')
+                );
+                return false;
+            }
+
+            $result = openssl_verify($sign_string, $signature, $public_key, OPENSSL_ALGO_SHA256);
+
+            if ($result === -1) {
+                $this->logger->error(
+                    'OpenSSL verify error: ' . openssl_error_string(),
+                    array('source' => 'telebirr')
+                );
+                return false;
+            }
+
+            return $result === 1;
         }
 
         /**
@@ -681,7 +949,8 @@ function wc_telebirr_init_gateway() {
 
         /**
          * Handle Telebirr webhook callback
-         * Security: validates HTTP method, Content-Type, IP, signature, amount, and order ownership.
+         * Security: validates HTTP method, Content-Type, IP, timestamp freshness,
+         * signature, amount, and order ownership.
          */
         public function handle_callback() {
             $this->logger->info('Telebirr callback received', array('source' => 'telebirr'));
@@ -747,8 +1016,39 @@ function wc_telebirr_init_gateway() {
             }
 
             $biz = $data['biz_content'];
+
+            // Timestamp freshness validation
+            // Per Telebirr spec: "The time of the timestamp is consistent with that of
+            // the server (within one minute)." We use a generous 5-minute window for clock skew.
+            $callback_timestamp = 0;
+            if (isset($data['timestamp'])) {
+                $callback_timestamp = intval($data['timestamp']);
+            } elseif (isset($biz['timestamp'])) {
+                $callback_timestamp = intval($biz['timestamp']);
+            }
+
+            if ($callback_timestamp > 0) {
+                $current_time_ms = round(microtime(true) * 1000);
+                $time_diff_ms = abs($current_time_ms - $callback_timestamp);
+                $max_age_ms = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+                if ($time_diff_ms > $max_age_ms) {
+                    $this->logger->warning(
+                        sprintf(
+                            'Callback rejected: stale timestamp. Callback: %d, Server: %d, Diff: %dms (max: %dms)',
+                            $callback_timestamp,
+                            (int) $current_time_ms,
+                            (int) $time_diff_ms,
+                            $max_age_ms
+                        ),
+                        array('source' => 'telebirr')
+                    );
+                    status_header(400);
+                    exit('Stale timestamp');
+                }
+            }
             
-            // Verify RSA signature
+            // Verify RSA-PSS signature
             if (!$this->verify_signature($data)) {
                 $this->logger->error(
                     'Callback rejected: signature verification failed',
@@ -881,77 +1181,6 @@ function wc_telebirr_init_gateway() {
             header('Content-Type: application/json');
             echo wp_json_encode(array('code' => '00000', 'message' => 'success'));
             exit;
-        }
-
-        /**
-         * Verify webhook signature from Telebirr
-         * Properly handles nested biz_content by JSON-encoding it for the signing string.
-         *
-         * @param array $data The full webhook payload
-         * @return bool True if signature is valid
-         */
-        private function verify_signature($data) {
-            if (!isset($data['sign'])) {
-                $this->logger->warning('Signature verification failed: no sign field in payload', array('source' => 'telebirr'));
-                return false;
-            }
-
-            $received_sign = base64_decode($data['sign']);
-            if ($received_sign === false) {
-                $this->logger->warning('Signature verification failed: invalid base64 in sign field', array('source' => 'telebirr'));
-                return false;
-            }
-
-            // Remove sign and sign_type from data before building verification string
-            $verify_data = $data;
-            unset($verify_data['sign']);
-            unset($verify_data['sign_type']);
-
-            // Flatten nested arrays to JSON strings (critical: includes biz_content in verification)
-            $flat_data = array();
-            foreach ($verify_data as $key => $value) {
-                if ($value === '') {
-                    continue;
-                }
-                if (is_array($value)) {
-                    $flat_data[$key] = wp_json_encode($value);
-                } else {
-                    $flat_data[$key] = $value;
-                }
-            }
-
-            // Sort parameters alphabetically
-            ksort($flat_data);
-            
-            // Build signing string
-            $sign_parts = array();
-            foreach ($flat_data as $key => $value) {
-                $sign_parts[] = $key . '=' . $value;
-            }
-            $sign_string = implode('&', $sign_parts);
-
-            // Load public key
-            $public_key = openssl_pkey_get_public($this->public_key);
-            
-            if (!$public_key) {
-                $this->logger->error(
-                    'Signature verification failed: cannot load Telebirr public key',
-                    array('source' => 'telebirr')
-                );
-                return false;
-            }
-
-            $result = openssl_verify($sign_string, $received_sign, $public_key, OPENSSL_ALGO_SHA256);
-
-            if ($result === -1) {
-                $this->logger->error(
-                    'OpenSSL verify error: ' . openssl_error_string(),
-                    array('source' => 'telebirr')
-                );
-                return false;
-            }
-
-            return $result === 1;
         }
 
         /**
