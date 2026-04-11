@@ -55,17 +55,21 @@ function wc_telebirr_init_gateway() {
             $this->init_form_fields();
             $this->init_settings();
 
-            // Define user set variables
-            $this->title              = $this->get_option('title');
-            $this->description        = $this->get_option('description');
-            $this->enabled            = $this->get_option('enabled');
-            $this->testmode           = 'yes' === $this->get_option('testmode');
-            $this->fabric_app_id      = $this->testmode ? $this->get_option('test_fabric_app_id') : $this->get_option('fabric_app_id');
-            $this->app_secret         = $this->testmode ? $this->get_option('test_app_secret') : $this->get_option('app_secret');
-            $this->merchant_app_id    = $this->testmode ? $this->get_option('test_merchant_app_id') : $this->get_option('merchant_app_id');
-            $this->merchant_code      = $this->testmode ? $this->get_option('test_merchant_code') : $this->get_option('merchant_code');
-            $this->private_key        = $this->get_option('private_key');
-            $this->public_key         = $this->get_option('public_key');
+             // Define user set variables
+             $this->title              = $this->get_option('title');
+             $this->description        = $this->get_option('description');
+             $this->enabled            = $this->get_option('enabled');
+             $this->testmode           = 'yes' === $this->get_option('testmode');
+             $this->fabric_app_id      = $this->testmode ? $this->get_option('test_fabric_app_id') : $this->get_option('fabric_app_id');
+             $this->app_secret         = $this->testmode ? $this->get_option('test_app_secret') : $this->get_option('app_secret');
+             $this->merchant_app_id    = $this->testmode ? $this->get_option('test_merchant_app_id') : $this->get_option('merchant_app_id');
+             $this->merchant_code      = $this->testmode ? $this->get_option('test_merchant_code') : $this->get_option('merchant_code');
+             $this->private_key        = $this->get_option('private_key');
+             $this->public_key         = $this->get_option('public_key');
+             
+             // Direct phone number payment settings
+             $this->enable_direct_phone = 'yes' === $this->get_option('enable_direct_phone');
+             $this->direct_phone_number = $this->get_option('direct_phone_number');
 
             // API URLs
             $this->base_url           = $this->testmode
@@ -187,15 +191,36 @@ function wc_telebirr_init_gateway() {
                     'default'     => '',
                     'css'         => 'font-family: monospace; height: 120px;',
                 ),
-                'public_key' => array(
-                    'title'       => __('Telebirr Public Key', 'wc-telebirr-payment'),
-                    'type'        => 'textarea',
-                    'description' => __('Telebirr RSA public key for webhook verification.', 'wc-telebirr-payment'),
-                    'default'     => '',
-                    'css'         => 'font-family: monospace; height: 120px;',
-                ),
-            );
-        }
+                 'public_key' => array(
+                     'title'       => __('Telebirr Public Key', 'wc-telebirr-payment'),
+                     'type'        => 'textarea',
+                     'description' => __('Telebirr RSA public key for webhook verification.', 'wc-telebirr-payment'),
+                     'default'     => '',
+                     'css'         => 'font-family: monospace; height: 120px;',
+                 ),
+                 'direct_payment' => array(
+                     'title'       => __('Direct Phone Payment', 'wc-telebirr-payment'),
+                     'type'        => 'title',
+                     'description' => __('Configuration for direct transfer to phone number option.', 'wc-telebirr-payment'),
+                 ),
+                 'enable_direct_phone' => array(
+                     'title'       => __('Enable Direct Phone Payment', 'wc-telebirr-payment'),
+                     'type'        => 'checkbox',
+                     'label'       => __('Enable direct transfer to configured phone number', 'wc-telebirr-payment'),
+                     'default'     => 'no',
+                     'description' => __('When enabled, payments will be transferred directly to the configured phone number instead of merchant account.', 'wc-telebirr-payment'),
+                     'desc_tip'    => true,
+                 ),
+                 'direct_phone_number' => array(
+                     'title'       => __('Destination Phone Number', 'wc-telebirr-payment'),
+                     'type'        => 'text',
+                     'description' => __('Telebirr phone number where payments should be directly transferred (format: 2519XXXXXXXXX).', 'wc-telebirr-payment'),
+                     'default'     => '',
+                     'placeholder' => '251912345678',
+                     'desc_tip'    => true,
+                 ),
+             );
+         }
 
         /**
          * Process the payment and return the result
@@ -285,18 +310,24 @@ function wc_telebirr_init_gateway() {
             $order_id = $order->get_id();
             $amount = number_format($order->get_total(), 2, '.', '');
             
-            $biz_content = array(
-                'notify_url'      => home_url('/wc-api/telebirr_callback'),
-                'appid'           => $this->merchant_app_id,
-                'merch_code'      => $this->merchant_code,
-                'merch_order_id'  => (string) $order_id,
-                'trade_type'      => 'Checkout',
-                'title'           => sprintf(__('Order #%s', 'wc-telebirr-payment'), $order_id),
-                'total_amount'    => $amount,
-                'trans_currency'  => 'ETB',
-                'timeout_express' => '120m',
-                'redirect_url'    => $this->get_return_url($order),
-            );
+             $biz_content = array(
+                 'notify_url'      => home_url('/wc-api/telebirr_callback'),
+                 'appid'           => $this->merchant_app_id,
+                 'merch_code'      => $this->merchant_code,
+                 'merch_order_id'  => (string) $order_id,
+                 'trade_type'      => 'Checkout',
+                 'title'           => sprintf(__('Order #%s', 'wc-telebirr-payment'), $order_id),
+                 'total_amount'    => $amount,
+                 'trans_currency'  => 'ETB',
+                 'timeout_express' => '120m',
+                 'redirect_url'    => $this->get_return_url($order),
+             );
+             
+             // Add direct phone number payment if enabled
+             if ($this->enable_direct_phone && !empty($this->direct_phone_number)) {
+                 $biz_content['payment_mode'] = 'DIRECT_TO_PHONE';
+                 $biz_content['receiver_msisdn'] = $this->direct_phone_number;
+             }
 
             $request = array(
                 'timestamp' => $timestamp,
