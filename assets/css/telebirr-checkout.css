@@ -1,0 +1,177 @@
+/**
+ * WooCommerce Telebirr Payment Gateway - Checkout & Frontend Styles
+ *
+ * Brand colors:
+ *   Primary Blue:  #0066B3
+ *   Gold/Amber:    #F5A623
+ */
+
+/* =========================================================
+   Checkout - Payment Method Option
+   ========================================================= */
+
+/* Payment method icon sizing */
+.payment_method_telebirr img {
+    max-height: 32px;
+    width: auto;
+    vertical-align: middle;
+}
+
+/* Payment method label */
+.payment_method_telebirr label {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    font-weight: 500;
+    font-size: 15px;
+    color: #1E293B;
+}
+
+/* Payment method description box */
+.payment_method_telebirr .payment_box {
+    background: #F0F7FF !important;
+    border: 1px solid #D6E8F7;
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #334155;
+}
+
+.payment_method_telebirr .payment_box::before {
+    border-bottom-color: #D6E8F7 !important;
+}
+
+/* =========================================================
+   Receipt / Redirect Page
+   ========================================================= */
+.telebirr-receipt {
+    text-align: center;
+    padding: 48px 24px;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.telebirr-receipt-logo {
+    width: 80px;
+    height: auto;
+    margin-bottom: 24px;
+}
+
+.telebirr-receipt h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1E293B;
+    margin: 0 0 8px 0;
+}
+
+.telebirr-receipt p {
+    font-size: 15px;
+    color: #64748B;
+    line-height: 1.6;
+    margin: 0 0 28px 0;
+}
+
+/* Spinner animation */
+.telebirr-spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    margin-bottom: 20px;
+}
+
+.telebirr-spinner::after {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3.5px solid #E2E8F0;
+    border-top-color: #0066B3;
+    animation: telebirr-spin 0.8s linear infinite;
+}
+
+@keyframes telebirr-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Security badge */
+.telebirr-receipt-secure {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #94A3B8;
+    margin-top: 24px;
+}
+
+.telebirr-receipt-secure svg {
+    width: 14px;
+    height: 14px;
+    fill: #94A3B8;
+}
+
+/* Progress bar */
+.telebirr-progress-bar {
+    width: 200px;
+    height: 4px;
+    background: #E2E8F0;
+    border-radius: 2px;
+    margin: 0 auto 28px auto;
+    overflow: hidden;
+}
+
+.telebirr-progress-bar-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #0066B3 0%, #F5A623 100%);
+    border-radius: 2px;
+    animation: telebirr-progress 3s ease-in-out forwards;
+}
+
+@keyframes telebirr-progress {
+    0%   { width: 0%; }
+    50%  { width: 70%; }
+    100% { width: 95%; }
+}
+
+/* Manual redirect link */
+.telebirr-receipt-manual-link {
+    display: inline-block;
+    margin-top: 16px;
+    font-size: 13px;
+    color: #0066B3;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.telebirr-receipt-manual-link:hover {
+    color: #004E8C;
+}
+
+/* Order summary mini card */
+.telebirr-order-summary {
+    background: #F8F9FB;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 28px;
+    text-align: left;
+    font-size: 14px;
+}
+
+.telebirr-order-summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    color: #475569;
+}
+
+.telebirr-order-summary-row:last-child {
+    border-top: 1px solid #E2E8F0;
+    padding-top: 10px;
+    margin-top: 4px;
+    font-weight: 700;
+    color: #1E293B;
+    font-size: 16px;
+}

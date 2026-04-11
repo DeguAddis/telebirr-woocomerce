@@ -1,0 +1,316 @@
+/**
+ * WooCommerce Telebirr Payment Gateway - Admin Styles
+ *
+ * Brand colors:
+ *   Primary Blue:  #0066B3
+ *   Dark Blue:     #004E8C
+ *   Gold/Amber:    #F5A623
+ *   Light Gold:    #FFF8EC
+ *   Light Blue:    #E8F4FD
+ *   Neutral BG:    #F8F9FB
+ */
+
+/* =========================================================
+   Settings Page Header
+   ========================================================= */
+.telebirr-admin-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: linear-gradient(135deg, #0066B3 0%, #004E8C 100%);
+    color: #fff;
+    padding: 24px 28px;
+    border-radius: 10px;
+    margin: 16px 0 24px 0;
+    box-shadow: 0 4px 16px rgba(0, 102, 179, 0.18);
+}
+
+.telebirr-admin-header img {
+    width: 64px;
+    height: auto;
+    background: #fff;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+}
+
+.telebirr-admin-header-text h2 {
+    margin: 0 0 4px 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.2px;
+}
+
+.telebirr-admin-header-text p {
+    margin: 0;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.4;
+}
+
+.telebirr-admin-header-badges {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.telebirr-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+}
+
+.telebirr-badge--version {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.telebirr-badge--test {
+    background: #F5A623;
+    color: #3D2600;
+}
+
+.telebirr-badge--live {
+    background: #34C759;
+    color: #fff;
+}
+
+/* =========================================================
+   Settings Table - Section Headings (type="title")
+   ========================================================= */
+#woocommerce_telebirr_enabled,
+.form-table:first-of-type {
+    margin-top: 0;
+}
+
+.wc-settings-sub-title {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: #0066B3 !important;
+    padding: 18px 0 6px 0 !important;
+    margin: 0 !important;
+    border-bottom: 2px solid #E8F4FD;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.wc-settings-sub-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 20px;
+    background: #F5A623;
+    border-radius: 2px;
+}
+
+/* Section description text under title headings */
+.form-table + p {
+    color: #666;
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+/* =========================================================
+   Settings Table - Improved Layout
+   ========================================================= */
+
+/* Section cards: wrap each form-table in a visual card */
+#mainform .form-table {
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 4px 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+#mainform .form-table tr {
+    border-bottom: 1px solid #F1F5F9;
+}
+
+#mainform .form-table tr:last-child {
+    border-bottom: none;
+}
+
+#mainform .form-table th {
+    padding: 16px 12px 16px 0;
+    font-weight: 600;
+    color: #1E293B;
+    font-size: 13px;
+    vertical-align: top;
+}
+
+#mainform .form-table td {
+    padding: 16px 0;
+}
+
+/* Input field styling */
+#mainform .form-table input[type="text"],
+#mainform .form-table input[type="password"],
+#mainform .form-table textarea,
+#mainform .form-table select {
+    border: 1.5px solid #D1D9E6;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background: #FAFBFC;
+}
+
+#mainform .form-table input[type="text"]:focus,
+#mainform .form-table input[type="password"]:focus,
+#mainform .form-table textarea:focus,
+#mainform .form-table select:focus {
+    border-color: #0066B3;
+    box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.12);
+    background: #fff;
+    outline: none;
+}
+
+/* Textarea specific */
+#mainform .form-table textarea {
+    font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Checkbox toggle style */
+#mainform .form-table input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    accent-color: #0066B3;
+    cursor: pointer;
+}
+
+/* Description text below fields */
+#mainform .form-table .description {
+    color: #64748B;
+    font-size: 12px;
+    margin-top: 6px;
+    line-height: 1.4;
+}
+
+/* =========================================================
+   Test Mode Warning Banner
+   ========================================================= */
+.telebirr-test-mode-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, #FFF8EC 0%, #FFF3D6 100%);
+    border: 1px solid #F5D88E;
+    border-left: 4px solid #F5A623;
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: #7C5E00;
+    line-height: 1.5;
+}
+
+.telebirr-test-mode-banner .dashicons {
+    color: #F5A623;
+    font-size: 22px;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   Save Button Styling
+   ========================================================= */
+#mainform .submit .button-primary,
+#mainform p.submit .button-primary {
+    background: linear-gradient(135deg, #0066B3 0%, #004E8C 100%);
+    border: none;
+    border-radius: 6px;
+    padding: 8px 28px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 8px rgba(0, 102, 179, 0.2);
+    text-shadow: none;
+}
+
+#mainform .submit .button-primary:hover,
+#mainform p.submit .button-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 102, 179, 0.3);
+}
+
+#mainform .submit .button-primary:active,
+#mainform p.submit .button-primary:active {
+    transform: translateY(0);
+}
+
+/* =========================================================
+   Admin Notice (phpseclib missing)
+   ========================================================= */
+.telebirr-admin-notice {
+    border-left: 4px solid #DC3545;
+    padding: 12px 16px;
+    border-radius: 4px;
+}
+
+.telebirr-admin-notice code {
+    background: #F1F5F9;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+/* =========================================================
+   Connection Status Indicator
+   ========================================================= */
+.telebirr-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.telebirr-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.telebirr-status-dot--active {
+    background: #34C759;
+    box-shadow: 0 0 6px rgba(52, 199, 89, 0.4);
+}
+
+.telebirr-status-dot--inactive {
+    background: #94A3B8;
+}
+
+/* =========================================================
+   Responsive
+   ========================================================= */
+@media screen and (max-width: 782px) {
+    .telebirr-admin-header {
+        flex-direction: column;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .telebirr-admin-header-badges {
+        justify-content: center;
+    }
+
+    #mainform .form-table {
+        padding: 4px 10px;
+    }
+}

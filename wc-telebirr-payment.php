@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Telebirr Payment Gateway
  * Plugin URI: https://github.com/yourusername/wc-telebirr-payment
  * Description: Telebirr mobile money payment gateway integration for WooCommerce (Fabric Gateway API)
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: Your Name
  * Author URI: https://yourwebsite.com
  * License: GPL v2 or later
@@ -101,7 +101,7 @@ function wc_telebirr_init_gateway() {
          */
         public function __construct() {
             $this->id                 = 'telebirr';
-            $this->icon               = apply_filters('woocommerce_telebirr_icon', plugins_url('assets/telebirr-logo.png', __FILE__));
+            $this->icon               = apply_filters('woocommerce_telebirr_icon', plugins_url('assets/img/telebirr-logo.png', __FILE__));
             $this->has_fields         = false;
             $this->method_title       = __('Telebirr', 'wc-telebirr-payment');
             $this->method_description = __('Accept payments via Telebirr mobile money service from Ethio Telecom.', 'wc-telebirr-payment');
@@ -144,6 +144,90 @@ function wc_telebirr_init_gateway() {
 
             // Add webhook listener
             add_action('woocommerce_api_telebirr_callback', array($this, 'handle_callback'));
+
+            // Enqueue admin styles on gateway settings page
+            add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_styles'));
+
+            // Enqueue frontend styles on checkout
+            add_action('wp_enqueue_scripts', array($this, 'enqueue_checkout_styles'));
+        }
+
+        /**
+         * Enqueue admin CSS on the Telebirr settings page
+         *
+         * @param string $hook The current admin page hook
+         */
+        public function enqueue_admin_styles($hook) {
+            if ($hook !== 'woocommerce_page_wc-settings') {
+                return;
+            }
+            // Only load on the Telebirr section
+            if (!isset($_GET['section']) || $_GET['section'] !== 'telebirr') {
+                return;
+            }
+            wp_enqueue_style(
+                'telebirr-admin-css',
+                plugins_url('assets/css/telebirr-admin.css', __FILE__),
+                array(),
+                '1.3.0'
+            );
+        }
+
+        /**
+         * Enqueue frontend CSS on checkout and order-pay pages
+         */
+        public function enqueue_checkout_styles() {
+            if (!is_checkout() && !is_checkout_pay_page()) {
+                return;
+            }
+            wp_enqueue_style(
+                'telebirr-checkout-css',
+                plugins_url('assets/css/telebirr-checkout.css', __FILE__),
+                array(),
+                '1.3.0'
+            );
+        }
+
+        /**
+         * Output branded header above the admin settings table
+         */
+        public function admin_options() {
+            $logo_url = plugins_url('assets/img/telebirr-logo.png', __FILE__);
+            $mode = $this->testmode ? 'test' : 'live';
+            $version = '1.3.0';
+            ?>
+            <div class="telebirr-admin-header">
+                <img src="<?php echo esc_url($logo_url); ?>" alt="Telebirr">
+                <div class="telebirr-admin-header-text">
+                    <h2><?php esc_html_e('Telebirr Payment Gateway', 'wc-telebirr-payment'); ?></h2>
+                    <p><?php esc_html_e('Accept payments via Telebirr mobile money from Ethio Telecom.', 'wc-telebirr-payment'); ?></p>
+                    <div class="telebirr-admin-header-badges">
+                        <span class="telebirr-badge telebirr-badge--version">v<?php echo esc_html($version); ?></span>
+                        <?php if ($this->testmode) : ?>
+                            <span class="telebirr-badge telebirr-badge--test"><?php esc_html_e('Test Mode', 'wc-telebirr-payment'); ?></span>
+                        <?php else : ?>
+                            <span class="telebirr-badge telebirr-badge--live"><?php esc_html_e('Live', 'wc-telebirr-payment'); ?></span>
+                        <?php endif; ?>
+                        <?php if ($this->enabled === 'yes') : ?>
+                            <span class="telebirr-status"><span class="telebirr-status-dot telebirr-status-dot--active"></span> <?php esc_html_e('Enabled', 'wc-telebirr-payment'); ?></span>
+                        <?php else : ?>
+                            <span class="telebirr-status"><span class="telebirr-status-dot telebirr-status-dot--inactive"></span> <?php esc_html_e('Disabled', 'wc-telebirr-payment'); ?></span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <?php if ($this->testmode) : ?>
+            <div class="telebirr-test-mode-banner">
+                <span class="dashicons dashicons-warning"></span>
+                <span>
+                    <?php esc_html_e('Test mode is active. Payments will be processed through the Telebirr sandbox environment. Disable test mode before going live.', 'wc-telebirr-payment'); ?>
+                </span>
+            </div>
+            <?php endif; ?>
+            <table class="form-table">
+                <?php $this->generate_settings_html(); ?>
+            </table>
+            <?php
         }
 
         /**
@@ -1184,7 +1268,7 @@ function wc_telebirr_init_gateway() {
         }
 
         /**
-         * Receipt page
+         * Receipt page - branded redirect UI with loading animation
          *
          * @param int $order_id The WooCommerce order ID
          */
@@ -1195,13 +1279,62 @@ function wc_telebirr_init_gateway() {
                 return;
             }
 
-            echo '<p>' . esc_html__('Thank you for your order. You will be redirected to Telebirr to complete your payment.', 'wc-telebirr-payment') . '</p>';
-            
-            // Auto redirect if we have the checkout URL (HPOS-compatible)
+            $logo_url = plugins_url('assets/img/telebirr-logo.png', __FILE__);
             $prepay_id = $order->get_meta('_telebirr_prepay_id', true);
-            if ($prepay_id) {
-                $checkout_url = $this->build_checkout_url($prepay_id);
-                echo '<script>window.location.href = "' . esc_url($checkout_url) . '";</script>';
+            $checkout_url = $prepay_id ? $this->build_checkout_url($prepay_id) : '';
+            $order_total = $order->get_formatted_order_total();
+            $order_number = $order->get_order_number();
+            ?>
+            <div class="telebirr-receipt">
+                <img src="<?php echo esc_url($logo_url); ?>" alt="Telebirr" class="telebirr-receipt-logo">
+
+                <div class="telebirr-order-summary">
+                    <div class="telebirr-order-summary-row">
+                        <span><?php esc_html_e('Order', 'wc-telebirr-payment'); ?></span>
+                        <span>#<?php echo esc_html($order_number); ?></span>
+                    </div>
+                    <div class="telebirr-order-summary-row">
+                        <span><?php esc_html_e('Payment Method', 'wc-telebirr-payment'); ?></span>
+                        <span><?php esc_html_e('Telebirr', 'wc-telebirr-payment'); ?></span>
+                    </div>
+                    <div class="telebirr-order-summary-row">
+                        <span><?php esc_html_e('Total', 'wc-telebirr-payment'); ?></span>
+                        <span><?php echo wp_kses_post($order_total); ?></span>
+                    </div>
+                </div>
+
+                <div class="telebirr-spinner"></div>
+
+                <h2><?php esc_html_e('Redirecting to Telebirr', 'wc-telebirr-payment'); ?></h2>
+                <p><?php esc_html_e('Please wait while we connect you to Telebirr to complete your payment securely.', 'wc-telebirr-payment'); ?></p>
+
+                <div class="telebirr-progress-bar">
+                    <div class="telebirr-progress-bar-fill"></div>
+                </div>
+
+                <?php if ($checkout_url) : ?>
+                    <a href="<?php echo esc_url($checkout_url); ?>" class="telebirr-receipt-manual-link">
+                        <?php esc_html_e('Click here if you are not redirected automatically', 'wc-telebirr-payment'); ?>
+                    </a>
+                <?php endif; ?>
+
+                <div class="telebirr-receipt-secure">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+                    <span><?php esc_html_e('Secured by Telebirr', 'wc-telebirr-payment'); ?></span>
+                </div>
+            </div>
+            <?php
+            // Auto redirect via JavaScript with a brief delay for UX
+            if ($checkout_url) {
+                ?>
+                <script>
+                    (function() {
+                        setTimeout(function() {
+                            window.location.href = <?php echo wp_json_encode($checkout_url); ?>;
+                        }, 2000);
+                    })();
+                </script>
+                <?php
             }
         }
     }
