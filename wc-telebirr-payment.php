@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: WooCommerce Telebirr Payment Gateway
- * Plugin URI:  https://github.com/addisdegu22-commits/telebirr-woocomerce
+ * Plugin URI: https://github.com/yourusername/wc-telebirr-payment
  * Description: Telebirr mobile money payment gateway integration for WooCommerce
- * Version: 1.0.6
- * Author: Degu Addis 
- * Author URI: https://blackpixel.et
+ * Version: 1.0.0
+ * Author: Your Name
+ * Author URI: https://yourwebsite.com
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wc-telebirr-payment
@@ -47,9 +47,13 @@ function wc_telebirr_init_gateway() {
         public function __construct() {
             $this->id                 = 'telebirr';
             $this->icon               = apply_filters('woocommerce_telebirr_icon', plugins_url('assets/telebirr-logo.png', __FILE__));
-            $this->has_fields         = false;
+            $this->has_fields         = true;
             $this->method_title       = __('Telebirr', 'wc-telebirr-payment');
             $this->method_description = __('Accept payments via Telebirr mobile money service from Ethio Telecom.', 'wc-telebirr-payment');
+
+            // Load checkout display settings
+            $this->hide_billing_fields = 'yes' === $this->get_option('hide_billing_fields', 'yes');
+            $this->show_order_total    = 'yes' === $this->get_option('show_order_total', 'yes');
 
             // Load the settings
             $this->init_form_fields();
@@ -90,137 +94,266 @@ function wc_telebirr_init_gateway() {
         }
 
         /**
+         * Display payment method fields on checkout
+         */
+        public function payment_fields() {
+            echo '<div class="wc-telebirr-payment-box">';
+
+            // Display description
+            echo wpautop(wptexturize($this->description));
+
+            // Show order total if enabled
+            if ($this->show_order_total && WC()->cart) {
+                $total = WC()->cart->get_total();
+                echo '<p class="wc-telebirr-total"><strong>';
+                printf(__('Order Total: %s', 'wc-telebirr-payment'), $total);
+                echo '</strong></p>';
+            }
+
+            // Display payment instructions
+            echo '<div class="wc-telebirr-instructions">';
+            echo '<p class="form-row form-row-wide">';
+            echo '<span class="woocommerce-info">';
+            echo esc_html__('After placing your order you will be redirected to the secure Telebirr payment page to complete your transaction.', 'wc-telebirr-payment');
+            echo '</span>';
+            echo '</p>';
+            echo '</div>';
+
+            echo '</div>';
+        }
+
+        /**
          * Initialize Gateway Settings Form Fields
          */
         public function init_form_fields() {
             $this->form_fields = array(
+
+                'general_settings_section' => array(
+                    'title'       => __('General Settings', 'wc-telebirr-payment'),
+                    'type'        => 'title',
+                    'description' => __('Configure basic gateway settings and display options.', 'wc-telebirr-payment'),
+                ),
+
                 'enabled' => array(
                     'title'       => __('Enable/Disable', 'wc-telebirr-payment'),
                     'type'        => 'checkbox',
-                    'label'       => __('Enable Telebirr Payment', 'wc-telebirr-payment'),
+                    'label'       => __('Enable Telebirr Payment Gateway', 'wc-telebirr-payment'),
                     'default'     => 'no',
-                ),
-                'title' => array(
-                    'title'       => __('Title', 'wc-telebirr-payment'),
-                    'type'        => 'text',
-                    'description' => __('This controls the title which the user sees during checkout.', 'wc-telebirr-payment'),
-                    'default'     => __('Telebirr', 'wc-telebirr-payment'),
+                    'description' => __('Check this box to enable Telebirr payment method on your store.', 'wc-telebirr-payment'),
                     'desc_tip'    => true,
                 ),
-                'description' => array(
-                    'title'       => __('Description', 'wc-telebirr-payment'),
-                    'type'        => 'textarea',
-                    'description' => __('This controls the description which the user sees during checkout.', 'wc-telebirr-payment'),
-                    'default'     => __('Pay securely using your Telebirr mobile money account.', 'wc-telebirr-payment'),
+
+                'title' => array(
+                    'title'       => __('Method Title', 'wc-telebirr-payment'),
+                    'type'        => 'text',
+                    'description' => __('Payment method title displayed to customers during checkout.', 'wc-telebirr-payment'),
+                    'default'     => __('Telebirr', 'wc-telebirr-payment'),
+                    'desc_tip'    => true,
+                    'placeholder' => __('Telebirr', 'wc-telebirr-payment'),
                 ),
+
+                'description' => array(
+                    'title'       => __('Method Description', 'wc-telebirr-payment'),
+                    'type'        => 'textarea',
+                    'description' => __('Payment method description displayed to customers during checkout.', 'wc-telebirr-payment'),
+                    'default'     => __('Pay securely using your Telebirr mobile money account. You will be redirected to Telebirr payment page to complete your transaction.', 'wc-telebirr-payment'),
+                    'desc_tip'    => true,
+                    'css'         => 'width: 400px; height: 80px;',
+                ),
+
                 'testmode' => array(
-                    'title'       => __('Test mode', 'wc-telebirr-payment'),
+                    'title'       => __('Test Mode', 'wc-telebirr-payment'),
                     'type'        => 'checkbox',
                     'label'       => __('Enable Test Mode', 'wc-telebirr-payment'),
                     'default'     => 'yes',
-                    'description' => __('Place the payment gateway in test mode using test API credentials.', 'wc-telebirr-payment'),
+                    'description' => __('Test mode uses sandbox environment. Disable for live production transactions.', 'wc-telebirr-payment'),
                     'desc_tip'    => true,
                 ),
+
+                'checkout_display_section' => array(
+                    'title'       => __('Checkout Display Options', 'wc-telebirr-payment'),
+                    'type'        => 'title',
+                    'description' => __('Configure how this payment method appears during checkout.', 'wc-telebirr-payment'),
+                ),
+
+                'hide_billing_fields' => array(
+                    'title'       => __('Simplify Checkout', 'wc-telebirr-payment'),
+                    'type'        => 'checkbox',
+                    'label'       => __('Hide billing fields when Telebirr is selected', 'wc-telebirr-payment'),
+                    'default'     => 'yes',
+                    'description' => __('Automatically hide billing address fields when Telebirr is chosen as payment method for faster checkout.', 'wc-telebirr-payment'),
+                    'desc_tip'    => true,
+                ),
+
+                'show_order_total' => array(
+                    'title'       => __('Show Order Total', 'wc-telebirr-payment'),
+                    'type'        => 'checkbox',
+                    'label'       => __('Display order total in payment description', 'wc-telebirr-payment'),
+                    'default'     => 'yes',
+                    'description' => __('Show the order amount in the payment method description during checkout.', 'wc-telebirr-payment'),
+                    'desc_tip'    => true,
+                ),
+
+                'api_credentials_section' => array(
+                    'title'       => __('API Credentials', 'wc-telebirr-payment'),
+                    'type'        => 'title',
+                    'description' => __('Configure your Telebirr API credentials obtained from Telebirr developer portal.', 'wc-telebirr-payment'),
+                ),
+
                 'test_credentials' => array(
                     'title'       => __('Test Credentials', 'wc-telebirr-payment'),
                     'type'        => 'title',
-                    'description' => __('Enter your test API credentials as provided by Telebirr.', 'wc-telebirr-payment'),
+                    'description' => __('Enter your sandbox test API credentials below. These are only used when Test Mode is enabled.', 'wc-telebirr-payment'),
                 ),
+
                 'test_fabric_app_id' => array(
                     'title'       => __('Test Fabric App ID', 'wc-telebirr-payment'),
                     'type'        => 'text',
-                    'description' => __('Your test Fabric Application ID.', 'wc-telebirr-payment'),
+                    'description' => __('Your Fabric Application ID from Telebirr sandbox portal.', 'wc-telebirr-payment'),
                     'default'     => '',
+                    'desc_tip'    => true,
+                    'placeholder' => __('Enter Fabric App ID', 'wc-telebirr-payment'),
                 ),
+
                 'test_app_secret' => array(
                     'title'       => __('Test App Secret', 'wc-telebirr-payment'),
                     'type'        => 'password',
-                    'description' => __('Your test App Secret key.', 'wc-telebirr-payment'),
+                    'description' => __('Your Fabric App Secret key from Telebirr sandbox portal.', 'wc-telebirr-payment'),
                     'default'     => '',
+                    'desc_tip'    => true,
+                    'placeholder' => __('Enter App Secret', 'wc-telebirr-payment'),
                 ),
+
                 'test_merchant_app_id' => array(
                     'title'       => __('Test Merchant App ID', 'wc-telebirr-payment'),
                     'type'        => 'text',
-                    'description' => __('Your test Merchant Application ID.', 'wc-telebirr-payment'),
+                    'description' => __('Your Merchant Application ID from Telebirr sandbox portal.', 'wc-telebirr-payment'),
                     'default'     => '',
+                    'desc_tip'    => true,
+                    'placeholder' => __('Enter Merchant App ID', 'wc-telebirr-payment'),
                 ),
+
                 'test_merchant_code' => array(
                     'title'       => __('Test Merchant Code', 'wc-telebirr-payment'),
                     'type'        => 'text',
-                    'description' => __('Your test Merchant Code.', 'wc-telebirr-payment'),
+                    'description' => __('Your Merchant Code from Telebirr sandbox portal.', 'wc-telebirr-payment'),
                     'default'     => '',
+                    'desc_tip'    => true,
+                    'placeholder' => __('Enter Merchant Code', 'wc-telebirr-payment'),
                 ),
+
                 'live_credentials' => array(
-                    'title'       => __('Live Credentials', 'wc-telebirr-payment'),
+                    'title'       => __('Live Production Credentials', 'wc-telebirr-payment'),
                     'type'        => 'title',
-                    'description' => __('Enter your live production API credentials.', 'wc-telebirr-payment'),
+                    'description' => __('Enter your production API credentials below. These are used when Test Mode is disabled.', 'wc-telebirr-payment'),
                 ),
+
                 'fabric_app_id' => array(
                     'title'       => __('Live Fabric App ID', 'wc-telebirr-payment'),
                     'type'        => 'text',
-                    'description' => __('Your live Fabric Application ID.', 'wc-telebirr-payment'),
+                    'description' => __('Your Fabric Application ID from Telebirr production portal.', 'wc-telebirr-payment'),
                     'default'     => '',
+                    'desc_tip'    => true,
+                    'placeholder' => __('Enter Fabric App ID', 'wc-telebirr-payment'),
                 ),
+
                 'app_secret' => array(
                     'title'       => __('Live App Secret', 'wc-telebirr-payment'),
                     'type'        => 'password',
-                    'description' => __('Your live App Secret key.', 'wc-telebirr-payment'),
+                    'description' => __('Your Fabric App Secret key from Telebirr production portal.', 'wc-telebirr-payment'),
                     'default'     => '',
+                    'desc_tip'    => true,
+                    'placeholder' => __('Enter App Secret', 'wc-telebirr-payment'),
                 ),
+
                 'merchant_app_id' => array(
                     'title'       => __('Live Merchant App ID', 'wc-telebirr-payment'),
                     'type'        => 'text',
-                    'description' => __('Your live Merchant Application ID.', 'wc-telebirr-payment'),
+                    'description' => __('Your Merchant Application ID from Telebirr production portal.', 'wc-telebirr-payment'),
                     'default'     => '',
+                    'desc_tip'    => true,
+                    'placeholder' => __('Enter Merchant App ID', 'wc-telebirr-payment'),
                 ),
+
                 'merchant_code' => array(
                     'title'       => __('Live Merchant Code', 'wc-telebirr-payment'),
                     'type'        => 'text',
-                    'description' => __('Your live Merchant Code.', 'wc-telebirr-payment'),
+                    'description' => __('Your Merchant Code from Telebirr production portal.', 'wc-telebirr-payment'),
                     'default'     => '',
+                    'desc_tip'    => true,
+                    'placeholder' => __('Enter Merchant Code', 'wc-telebirr-payment'),
                 ),
-                'keys' => array(
-                    'title'       => __('Security Keys', 'wc-telebirr-payment'),
+
+                'security_section' => array(
+                    'title'       => __('Security Settings', 'wc-telebirr-payment'),
                     'type'        => 'title',
-                    'description' => __('RSA keys for request signing and verification.', 'wc-telebirr-payment'),
+                    'description' => __('RSA key configuration for request signing and webhook verification.', 'wc-telebirr-payment'),
                 ),
+
                 'private_key' => array(
-                    'title'       => __('Private Key', 'wc-telebirr-payment'),
+                    'title'       => __('Merchant Private Key', 'wc-telebirr-payment'),
                     'type'        => 'textarea',
-                    'description' => __('Your RSA private key (PEM format).', 'wc-telebirr-payment'),
+                    'description' => __('Your RSA private key (PEM format) used for signing payment requests. Generate this in your Telebirr merchant portal.', 'wc-telebirr-payment'),
                     'default'     => '',
-                    'css'         => 'font-family: monospace; height: 120px;',
+                    'css'         => 'font-family: monospace; height: 140px; width: 500px;',
+                    'desc_tip'    => true,
+                    'placeholder' => "-----BEGIN RSA PRIVATE KEY-----\n... your private key here ...\n-----END RSA PRIVATE KEY-----",
                 ),
-                 'public_key' => array(
-                     'title'       => __('Telebirr Public Key', 'wc-telebirr-payment'),
-                     'type'        => 'textarea',
-                     'description' => __('Telebirr RSA public key for webhook verification.', 'wc-telebirr-payment'),
-                     'default'     => '',
-                     'css'         => 'font-family: monospace; height: 120px;',
-                 ),
-                 'direct_payment' => array(
-                     'title'       => __('Direct Phone Payment', 'wc-telebirr-payment'),
-                     'type'        => 'title',
-                     'description' => __('Configuration for direct transfer to phone number option.', 'wc-telebirr-payment'),
-                 ),
-                 'enable_direct_phone' => array(
-                     'title'       => __('Enable Direct Phone Payment', 'wc-telebirr-payment'),
-                     'type'        => 'checkbox',
-                     'label'       => __('Enable direct transfer to configured phone number', 'wc-telebirr-payment'),
-                     'default'     => 'no',
-                     'description' => __('When enabled, payments will be transferred directly to the configured phone number instead of merchant account.', 'wc-telebirr-payment'),
-                     'desc_tip'    => true,
-                 ),
-                 'direct_phone_number' => array(
-                     'title'       => __('Destination Phone Number', 'wc-telebirr-payment'),
-                     'type'        => 'text',
-                     'description' => __('Telebirr phone number where payments should be directly transferred (format: 2519XXXXXXXXX).', 'wc-telebirr-payment'),
-                     'default'     => '',
-                     'placeholder' => '251912345678',
-                     'desc_tip'    => true,
-                 ),
-             );
-         }
+
+                'public_key' => array(
+                    'title'       => __('Telebirr Public Key', 'wc-telebirr-payment'),
+                    'type'        => 'textarea',
+                    'description' => __('Telebirr RSA public key (PEM format) used for verifying incoming webhook signatures. This is provided by Telebirr.', 'wc-telebirr-payment'),
+                    'default'     => '',
+                    'css'         => 'font-family: monospace; height: 140px; width: 500px;',
+                    'desc_tip'    => true,
+                    'placeholder' => "-----BEGIN PUBLIC KEY-----\n... public key content here ...\n-----END PUBLIC KEY-----",
+                ),
+
+                'webhook_section' => array(
+                    'title'       => __('Webhook Configuration', 'wc-telebirr-payment'),
+                    'type'        => 'title',
+                    'description' => __('Callback URL configuration for payment status notifications.', 'wc-telebirr-payment'),
+                ),
+
+                'webhook_info' => array(
+                    'title'       => __('Webhook Callback URL', 'wc-telebirr-payment'),
+                    'type'        => 'text',
+                    'description' => __('Copy this URL and paste it into your Telebirr merchant portal as the webhook notification endpoint.', 'wc-telebirr-payment'),
+                    'default'     => home_url( '/wc-api/telebirr_callback' ),
+                    'custom_attributes' => array(
+                        'readonly' => 'readonly',
+                        'onclick'  => 'this.select();',
+                    ),
+                    'desc_tip'    => true,
+                ),
+
+                'direct_payment_section' => array(
+                    'title'       => __('Direct Phone Payment', 'wc-telebirr-payment'),
+                    'type'        => 'title',
+                    'description' => __('Optional configuration for direct payments to a specific phone number instead of merchant account.', 'wc-telebirr-payment'),
+                ),
+
+                'enable_direct_phone' => array(
+                    'title'       => __('Enable Direct Payment', 'wc-telebirr-payment'),
+                    'type'        => 'checkbox',
+                    'label'       => __('Route payments directly to phone number', 'wc-telebirr-payment'),
+                    'default'     => 'no',
+                    'description' => __('When enabled, all payments will be transferred directly to the configured phone number instead of being deposited to your merchant account balance.', 'wc-telebirr-payment'),
+                    'desc_tip'    => true,
+                ),
+
+                'direct_phone_number' => array(
+                    'title'       => __('Destination Phone Number', 'wc-telebirr-payment'),
+                    'type'        => 'text',
+                    'description' => __('Telebirr phone number where payments should be sent. Must be in international format without plus sign.', 'wc-telebirr-payment'),
+                    'default'     => '',
+                    'placeholder' => '251912345678',
+                    'desc_tip'    => true,
+                ),
+
+            );
+        }
 
         /**
          * Process the payment and return the result
@@ -568,59 +701,131 @@ add_action('before_woocommerce_init', function() {
 });
 
 /**
+ * Add admin notices
+ */
+add_action('admin_notices', 'wc_telebirr_admin_notices');
+function wc_telebirr_admin_notices() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
+    $screen = get_current_screen();
+    if ($screen->id !== 'woocommerce_page_wc-settings' || !isset($_GET['section']) || $_GET['section'] !== 'telebirr') {
+        return;
+    }
+
+    $gateway = WC()->payment_gateways()->payment_gateways()['telebirr'];
+
+    // Test mode notice
+    if ($gateway->testmode) {
+        echo '<div class="notice notice-warning">';
+        echo '<p><strong>' . esc_html__('Telebirr Test Mode Active', 'wc-telebirr-payment') . '</strong> &ndash; ';
+        echo esc_html__('The payment gateway is currently operating in test mode. No live transactions will be processed.', 'wc-telebirr-payment');
+        echo '</p></div>';
+    }
+
+    // Missing credentials notice
+    if (empty($gateway->fabric_app_id) || empty($gateway->app_secret)) {
+        echo '<div class="notice notice-error">';
+        echo '<p><strong>' . esc_html__('Telebirr Configuration Required', 'wc-telebirr-payment') . '</strong> &ndash; ';
+        echo esc_html__('Please enter your API credentials to enable payment processing.', 'wc-telebirr-payment');
+        echo '</p></div>';
+    }
+}
+
+/**
  * Disable billing fields when Telebirr is selected payment method
  */
 add_filter('woocommerce_checkout_fields', 'wc_telebirr_disable_billing_fields', 999, 1);
 function wc_telebirr_disable_billing_fields($fields) {
     if (isset(WC()->session) && WC()->session->get('chosen_payment_method') === 'telebirr') {
-        // Hide all billing fields except country for shipping calculation
-        $fields['billing']['billing_first_name']['required'] = false;
-        $fields['billing']['billing_last_name']['required'] = false;
-        $fields['billing']['billing_company']['required'] = false;
-        $fields['billing']['billing_address_1']['required'] = false;
-        $fields['billing']['billing_address_2']['required'] = false;
-        $fields['billing']['billing_city']['required'] = false;
-        $fields['billing']['billing_postcode']['required'] = false;
-        $fields['billing']['billing_state']['required'] = false;
-        $fields['billing']['billing_phone']['required'] = false;
-        $fields['billing']['billing_email']['required'] = false;
+        $gateway = WC()->payment_gateways()->payment_gateways()['telebirr'];
         
-        // Add classes to hide fields via CSS
-        foreach ($fields['billing'] as $field_key => $field) {
-            if (!isset($fields['billing'][$field_key]['class'])) {
-                $fields['billing'][$field_key]['class'] = array();
+        if (isset($gateway) && $gateway->hide_billing_fields) {
+            // Keep only email required for order notifications
+            $optional_fields = array(
+                'billing_first_name',
+                'billing_last_name',
+                'billing_company',
+                'billing_address_1',
+                'billing_address_2',
+                'billing_city',
+                'billing_postcode',
+                'billing_state',
+                'billing_phone',
+                'billing_country'
+            );
+            
+            foreach ($optional_fields as $field) {
+                if (isset($fields['billing'][$field])) {
+                    $fields['billing'][$field]['required'] = false;
+                    $fields['billing'][$field]['class'][] = 'hidden-if-telebirr';
+                }
             }
-            $fields['billing'][$field_key]['class'][] = 'hidden-if-telebirr';
         }
     }
     return $fields;
 }
 
 /**
- * Enqueue checkout scripts for dynamic field hiding
+ * Enqueue checkout scripts and styles
  */
-add_action('wp_enqueue_scripts', 'wc_telebirr_enqueue_checkout_script');
-function wc_telebirr_enqueue_checkout_script() {
+add_action('wp_enqueue_scripts', 'wc_telebirr_enqueue_checkout_assets');
+function wc_telebirr_enqueue_checkout_assets() {
     if (is_checkout()) {
+        // Add inline CSS styles
+        wp_add_inline_style('woocommerce-general', "
+            .wc-telebirr-payment-box {
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 4px;
+                padding: 16px;
+                margin: 12px 0;
+            }
+            .wc-telebirr-total {
+                margin: 12px 0 0 0;
+                padding: 8px 12px;
+                background: #fff;
+                border-left: 4px solid #007cba;
+            }
+            .wc-telebirr-instructions .woocommerce-info {
+                margin-top: 12px;
+                margin-bottom: 0;
+            }
+            .hidden-if-telebirr {
+                transition: opacity 0.2s ease;
+            }
+        ");
+
+        // Enqueue checkout javascript
         wc_enqueue_js("
             jQuery(document).ready(function($) {
                 function toggleTelebirrFields() {
-                    if ($('input[name=\"payment_method\"]:checked').val() === 'telebirr') {
-                        $('.hidden-if-telebirr').closest('.form-row').hide();
-                        $('.woocommerce-billing-fields__field-wrapper').hide();
+                    const isTelebirr = $('input[name=\"payment_method\"]:checked').val() === 'telebirr';
+                    const $billingFields = $('.woocommerce-billing-fields__field-wrapper');
+                    const $hiddenFields = $('.hidden-if-telebirr').closest('.form-row');
+
+                    if (isTelebirr) {
+                        $hiddenFields.slideUp(200);
+                        $billingFields.addClass('telebirr-active');
                     } else {
-                        $('.hidden-if-telebirr').closest('.form-row').show();
-                        $('.woocommerce-billing-fields__field-wrapper').show();
+                        $hiddenFields.slideDown(200);
+                        $billingFields.removeClass('telebirr-active');
                     }
                 }
-                
-                // Initial check
+
+                // Initial check on page load
                 toggleTelebirrFields();
-                
-                // Update when payment method changes
+
+                // Handle payment method selection changes
                 $('form.checkout').on('change', 'input[name=\"payment_method\"]', function() {
                     toggleTelebirrFields();
-                    $('body').trigger('update_checkout');
+                    $(document.body).trigger('update_checkout');
+                });
+
+                // Handle updated checkout fragments
+                $(document.body).on('updated_checkout', function() {
+                    setTimeout(toggleTelebirrFields, 50);
                 });
             });
         ");
@@ -633,11 +838,14 @@ function wc_telebirr_enqueue_checkout_script() {
 add_action('woocommerce_after_checkout_validation', 'wc_telebirr_skip_billing_validation', 10, 2);
 function wc_telebirr_skip_billing_validation($data, $errors) {
     if ($data['payment_method'] === 'telebirr') {
-        // Remove all billing related errors
-        $error_codes = $errors->get_error_codes();
-        foreach ($error_codes as $code) {
-            if (str_starts_with($code, 'billing_')) {
-                $errors->remove($code);
+        $gateway = WC()->payment_gateways()->payment_gateways()['telebirr'];
+        
+        if (isset($gateway) && $gateway->hide_billing_fields) {
+            // Remove all billing related errors
+            foreach ($errors->get_error_codes() as $code) {
+                if (str_starts_with($code, 'billing_')) {
+                    $errors->remove($code);
+                }
             }
         }
     }
