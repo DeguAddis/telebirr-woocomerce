@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Telebirr Payment Gateway
  * Plugin URI: https://github.com/yourusername/wc-telebirr-payment
  * Description: Telebirr mobile money payment gateway integration for WooCommerce (Fabric Gateway API)
- * Version: 1.3.0
+ * Version: 1.4.0
  * Author: Your Name
  * Author URI: https://yourwebsite.com
  * License: GPL v2 or later
@@ -169,7 +169,7 @@ function wc_telebirr_init_gateway() {
                 'telebirr-admin-css',
                 plugins_url('assets/css/telebirr-admin.css', __FILE__),
                 array(),
-                '1.3.0'
+                '1.4.0'
             );
         }
 
@@ -184,7 +184,7 @@ function wc_telebirr_init_gateway() {
                 'telebirr-checkout-css',
                 plugins_url('assets/css/telebirr-checkout.css', __FILE__),
                 array(),
-                '1.3.0'
+                '1.4.0'
             );
         }
 
@@ -194,7 +194,7 @@ function wc_telebirr_init_gateway() {
         public function admin_options() {
             $logo_url = plugins_url('assets/img/telebirr-logo.png', __FILE__);
             $mode = $this->testmode ? 'test' : 'live';
-            $version = '1.3.0';
+            $version = '1.4.0';
             ?>
             <div class="telebirr-admin-header">
                 <img src="<?php echo esc_url($logo_url); ?>" alt="Telebirr">
@@ -1360,6 +1360,7 @@ function wc_telebirr_add_gateway($gateways) {
 function wc_telebirr_plugin_action_links($links) {
     $plugin_links = array(
         '<a href="' . esc_url(admin_url('admin.php?page=wc-settings&tab=checkout&section=telebirr')) . '">' . esc_html__('Settings', 'wc-telebirr-payment') . '</a>',
+        '<a href="' . esc_url(admin_url('admin.php?page=telebirr-dashboard')) . '">' . esc_html__('Dashboard', 'wc-telebirr-payment') . '</a>',
     );
     
     return array_merge($plugin_links, $links);
@@ -1371,3 +1372,386 @@ add_action('before_woocommerce_init', function() {
         \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
     }
 });
+
+// =====================================================================
+// Dashboard: Admin Menu, Data Queries, Page Rendering
+// =====================================================================
+
+/**
+ * Register the Telebirr Dashboard admin submenu under WooCommerce
+ */
+add_action('admin_menu', 'wc_telebirr_register_dashboard_menu');
+
+function wc_telebirr_register_dashboard_menu() {
+    add_submenu_page(
+        'woocommerce',
+        __('Telebirr Dashboard', 'wc-telebirr-payment'),
+        __('Telebirr Dashboard', 'wc-telebirr-payment'),
+        'manage_woocommerce',
+        'telebirr-dashboard',
+        'wc_telebirr_render_dashboard'
+    );
+}
+
+/**
+ * Enqueue dashboard assets
+ */
+add_action('admin_enqueue_scripts', 'wc_telebirr_dashboard_assets');
+
+function wc_telebirr_dashboard_assets($hook) {
+    if ($hook !== 'woocommerce_page_telebirr-dashboard') {
+        return;
+    }
+    wp_enqueue_style(
+        'telebirr-dashboard-css',
+        plugins_url('assets/css/telebirr-dashboard.css', __FILE__),
+        array(),
+        '1.4.0'
+    );
+    wp_enqueue_script(
+        'telebirr-dashboard-js',
+        plugins_url('assets/js/telebirr-dashboard.js', __FILE__),
+        array(),
+        '1.4.0',
+        true
+    );
+}
+
+/**
+ * Query Telebirr order metrics from WooCommerce orders.
+ * Uses WC HPOS-compatible queries via wc_get_orders().
+ *
+ * @param string $period 'today', '7days', '30days', '12months', 'all'
+ * @return array Metrics data
+ */
+function wc_telebirr_get_metrics($period = '30days') {
+    $date_after = '';
+    $now = current_time('timestamp');
+
+    switch ($period) {
+        case 'today':
+            $date_after = gmdate('Y-m-d', $now);
+            break;
+        case '7days':
+            $date_after = gmdate('Y-m-d', strtotime('-7 days', $now));
+            break;
+        case '30days':
+            $date_after = gmdate('Y-m-d', strtotime('-30 days', $now));
+            break;
+        case '12months':
+            $date_after = gmdate('Y-m-d', strtotime('-12 months', $now));
+            break;
+        case 'all':
+        default:
+            $date_after = '';
+            break;
+    }
+
+    $args = array(
+        'payment_method' => 'telebirr',
+        'limit'          => -1,
+        'return'         => 'objects',
+        'orderby'        => 'date',
+        'order'          => 'DESC',
+    );
+
+    if (!empty($date_after)) {
+        $args['date_created'] = '>=' . $date_after;
+    }
+
+    $orders = wc_get_orders($args);
+
+    $total_revenue = 0;
+    $total_count = count($orders);
+    $completed = 0;
+    $processing = 0;
+    $pending = 0;
+    $failed = 0;
+    $cancelled = 0;
+    $refunded = 0;
+    $on_hold = 0;
+    $daily_revenue = array();
+    $recent_orders = array();
+
+    foreach ($orders as $order) {
+        $status = $order->get_status();
+        $amount = (float) $order->get_total();
+        $date_key = $order->get_date_created() ? $order->get_date_created()->date('M d') : 'Unknown';
+
+        switch ($status) {
+            case 'completed':
+                $completed++;
+                $total_revenue += $amount;
+                break;
+            case 'processing':
+                $processing++;
+                $total_revenue += $amount;
+                break;
+            case 'pending':
+                $pending++;
+                break;
+            case 'failed':
+                $failed++;
+                break;
+            case 'cancelled':
+                $cancelled++;
+                break;
+            case 'refunded':
+                $refunded++;
+                break;
+            case 'on-hold':
+                $on_hold++;
+                break;
+        }
+
+        // Aggregate daily revenue (only completed/processing)
+        if (in_array($status, array('completed', 'processing'), true)) {
+            if (!isset($daily_revenue[$date_key])) {
+                $daily_revenue[$date_key] = 0;
+            }
+            $daily_revenue[$date_key] += $amount;
+        }
+
+        // Collect recent orders (first 20)
+        if (count($recent_orders) < 20) {
+            $recent_orders[] = array(
+                'id'             => $order->get_id(),
+                'order_number'   => $order->get_order_number(),
+                'status'         => $status,
+                'total'          => $amount,
+                'currency'       => $order->get_currency(),
+                'date'           => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i') : '',
+                'customer'       => $order->get_billing_first_name() . ' ' . $order->get_billing_last_name(),
+                'transaction_id' => $order->get_meta('_telebirr_transaction_id', true),
+            );
+        }
+    }
+
+    // Ensure daily revenue has last N days
+    $daily_labels = array_keys($daily_revenue);
+    $daily_values = array_values($daily_revenue);
+
+    // Reverse to chronological order (oldest first)
+    $daily_labels = array_reverse($daily_labels);
+    $daily_values = array_reverse($daily_values);
+
+    // Limit to last 14 data points for chart readability
+    $daily_labels = array_slice($daily_labels, -14);
+    $daily_values = array_slice($daily_values, -14);
+
+    $success_count = $completed + $processing;
+    $success_rate = $total_count > 0 ? round(($success_count / $total_count) * 100, 1) : 0;
+    $avg_order = $success_count > 0 ? $total_revenue / $success_count : 0;
+
+    return array(
+        'total_revenue'    => $total_revenue,
+        'total_count'      => $total_count,
+        'completed'        => $completed,
+        'processing'       => $processing,
+        'pending'          => $pending,
+        'failed'           => $failed,
+        'cancelled'        => $cancelled,
+        'refunded'         => $refunded,
+        'on_hold'          => $on_hold,
+        'success_rate'     => $success_rate,
+        'avg_order'        => $avg_order,
+        'daily_revenue'    => array('labels' => $daily_labels, 'values' => $daily_values),
+        'recent_orders'    => $recent_orders,
+        'status_breakdown' => array(
+            array('label' => 'Completed',  'value' => $completed,  'color' => '#34C759'),
+            array('label' => 'Processing', 'value' => $processing, 'color' => '#0066B3'),
+            array('label' => 'Pending',    'value' => $pending,    'color' => '#F5A623'),
+            array('label' => 'Failed',     'value' => $failed,     'color' => '#EF4444'),
+            array('label' => 'Cancelled',  'value' => $cancelled,  'color' => '#94A3B8'),
+            array('label' => 'On Hold',    'value' => $on_hold,    'color' => '#8B5CF6'),
+            array('label' => 'Refunded',   'value' => $refunded,   'color' => '#6366F1'),
+        ),
+    );
+}
+
+/**
+ * Render the Telebirr Dashboard page
+ */
+function wc_telebirr_render_dashboard() {
+    if (!current_user_can('manage_woocommerce')) {
+        wp_die(esc_html__('You do not have permission to access this page.', 'wc-telebirr-payment'));
+    }
+
+    $period = isset($_GET['period']) ? sanitize_text_field(wp_unslash($_GET['period'])) : '30days';
+    $valid_periods = array('today', '7days', '30days', '12months', 'all');
+    if (!in_array($period, $valid_periods, true)) {
+        $period = '30days';
+    }
+
+    $metrics = wc_telebirr_get_metrics($period);
+    $logo_url = plugins_url('assets/img/telebirr-logo.png', __FILE__);
+    $settings_url = admin_url('admin.php?page=wc-settings&tab=checkout&section=telebirr');
+    $dashboard_url = admin_url('admin.php?page=telebirr-dashboard');
+    $currency = get_woocommerce_currency_symbol();
+
+    // Pass data to JS
+    wp_localize_script('telebirr-dashboard-js', 'telebirrDashData', array(
+        'dailyRevenue'    => $metrics['daily_revenue'],
+        'statusBreakdown' => $metrics['status_breakdown'],
+    ));
+
+    $period_labels = array(
+        'today'    => __('Today', 'wc-telebirr-payment'),
+        '7days'    => __('Last 7 Days', 'wc-telebirr-payment'),
+        '30days'   => __('Last 30 Days', 'wc-telebirr-payment'),
+        '12months' => __('Last 12 Months', 'wc-telebirr-payment'),
+        'all'      => __('All Time', 'wc-telebirr-payment'),
+    );
+    ?>
+    <div class="wrap telebirr-dashboard">
+
+        <!-- Header -->
+        <div class="telebirr-dash-header">
+            <div class="telebirr-dash-header-left">
+                <img src="<?php echo esc_url($logo_url); ?>" alt="Telebirr">
+                <div>
+                    <h1><?php esc_html_e('Telebirr Dashboard', 'wc-telebirr-payment'); ?></h1>
+                    <p><?php esc_html_e('Monitor your Telebirr payment activity and performance.', 'wc-telebirr-payment'); ?></p>
+                </div>
+            </div>
+            <div class="telebirr-dash-header-right">
+                <a href="<?php echo esc_url($settings_url); ?>">
+                    <span class="dashicons dashicons-admin-generic" style="font-size:14px; vertical-align:middle; margin-right:4px;"></span>
+                    <?php esc_html_e('Settings', 'wc-telebirr-payment'); ?>
+                </a>
+            </div>
+        </div>
+
+        <!-- Period Filter -->
+        <form method="get" class="telebirr-date-filter">
+            <input type="hidden" name="page" value="telebirr-dashboard">
+            <label for="telebirr-period"><?php esc_html_e('Period:', 'wc-telebirr-payment'); ?></label>
+            <select name="period" id="telebirr-period">
+                <?php foreach ($period_labels as $key => $label) : ?>
+                    <option value="<?php echo esc_attr($key); ?>" <?php selected($period, $key); ?>>
+                        <?php echo esc_html($label); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <button type="submit" class="button"><?php esc_html_e('Apply', 'wc-telebirr-payment'); ?></button>
+        </form>
+
+        <!-- Metric Cards -->
+        <div class="telebirr-metrics">
+            <div class="telebirr-metric-card telebirr-metric-card--revenue">
+                <div class="telebirr-metric-icon"><span class="dashicons dashicons-chart-area"></span></div>
+                <div class="telebirr-metric-label"><?php esc_html_e('Total Revenue', 'wc-telebirr-payment'); ?></div>
+                <div class="telebirr-metric-value"><?php echo esc_html($currency . number_format($metrics['total_revenue'], 2)); ?></div>
+                <div class="telebirr-metric-sub"><?php echo esc_html(sprintf(__('Avg order: %s%s', 'wc-telebirr-payment'), $currency, number_format($metrics['avg_order'], 2))); ?></div>
+            </div>
+            <div class="telebirr-metric-card telebirr-metric-card--transactions">
+                <div class="telebirr-metric-icon"><span class="dashicons dashicons-list-view"></span></div>
+                <div class="telebirr-metric-label"><?php esc_html_e('Total Transactions', 'wc-telebirr-payment'); ?></div>
+                <div class="telebirr-metric-value"><?php echo esc_html($metrics['total_count']); ?></div>
+                <div class="telebirr-metric-sub"><?php echo esc_html($period_labels[$period]); ?></div>
+            </div>
+            <div class="telebirr-metric-card telebirr-metric-card--success">
+                <div class="telebirr-metric-icon"><span class="dashicons dashicons-yes-alt"></span></div>
+                <div class="telebirr-metric-label"><?php esc_html_e('Successful', 'wc-telebirr-payment'); ?></div>
+                <div class="telebirr-metric-value"><?php echo esc_html($metrics['completed'] + $metrics['processing']); ?></div>
+                <div class="telebirr-metric-sub"><?php echo esc_html($metrics['completed'] . ' completed, ' . $metrics['processing'] . ' processing'); ?></div>
+            </div>
+            <div class="telebirr-metric-card telebirr-metric-card--failed">
+                <div class="telebirr-metric-icon"><span class="dashicons dashicons-dismiss"></span></div>
+                <div class="telebirr-metric-label"><?php esc_html_e('Failed', 'wc-telebirr-payment'); ?></div>
+                <div class="telebirr-metric-value"><?php echo esc_html($metrics['failed']); ?></div>
+                <div class="telebirr-metric-sub"><?php echo esc_html($metrics['cancelled'] . ' cancelled'); ?></div>
+            </div>
+            <div class="telebirr-metric-card telebirr-metric-card--pending">
+                <div class="telebirr-metric-icon"><span class="dashicons dashicons-clock"></span></div>
+                <div class="telebirr-metric-label"><?php esc_html_e('Pending', 'wc-telebirr-payment'); ?></div>
+                <div class="telebirr-metric-value"><?php echo esc_html($metrics['pending']); ?></div>
+                <div class="telebirr-metric-sub"><?php echo esc_html($metrics['on_hold'] . ' on hold'); ?></div>
+            </div>
+            <div class="telebirr-metric-card telebirr-metric-card--rate">
+                <div class="telebirr-metric-icon"><span class="dashicons dashicons-performance"></span></div>
+                <div class="telebirr-metric-label"><?php esc_html_e('Success Rate', 'wc-telebirr-payment'); ?></div>
+                <div class="telebirr-metric-value"><?php echo esc_html($metrics['success_rate'] . '%'); ?></div>
+                <div class="telebirr-metric-sub"><?php echo esc_html($metrics['refunded'] . ' refunded'); ?></div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="telebirr-chart-row">
+            <div class="telebirr-chart-card">
+                <h3><?php esc_html_e('Revenue Over Time (ETB)', 'wc-telebirr-payment'); ?></h3>
+                <div class="telebirr-chart-canvas-wrap">
+                    <canvas id="telebirr-revenue-chart"></canvas>
+                </div>
+            </div>
+            <div class="telebirr-chart-card">
+                <h3><?php esc_html_e('Payment Status', 'wc-telebirr-payment'); ?></h3>
+                <div class="telebirr-chart-canvas-wrap" style="height:180px;">
+                    <canvas id="telebirr-status-chart"></canvas>
+                </div>
+                <ul class="telebirr-status-list">
+                    <?php foreach ($metrics['status_breakdown'] as $seg) : ?>
+                        <?php if ($seg['value'] > 0) : ?>
+                        <li>
+                            <span class="telebirr-sl-label">
+                                <span class="telebirr-status-dot-lg" style="background:<?php echo esc_attr($seg['color']); ?>"></span>
+                                <?php echo esc_html($seg['label']); ?>
+                            </span>
+                            <span class="telebirr-sl-count"><?php echo esc_html($seg['value']); ?></span>
+                        </li>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Recent Transactions Table -->
+        <div class="telebirr-table-card">
+            <h3><?php esc_html_e('Recent Transactions', 'wc-telebirr-payment'); ?></h3>
+            <?php if (empty($metrics['recent_orders'])) : ?>
+                <div class="telebirr-empty-state">
+                    <span class="dashicons dashicons-cart"></span>
+                    <p><?php esc_html_e('No Telebirr transactions found for the selected period.', 'wc-telebirr-payment'); ?></p>
+                </div>
+            <?php else : ?>
+            <table class="telebirr-txn-table">
+                <thead>
+                    <tr>
+                        <th><?php esc_html_e('Order', 'wc-telebirr-payment'); ?></th>
+                        <th><?php esc_html_e('Date', 'wc-telebirr-payment'); ?></th>
+                        <th><?php esc_html_e('Customer', 'wc-telebirr-payment'); ?></th>
+                        <th><?php esc_html_e('Amount', 'wc-telebirr-payment'); ?></th>
+                        <th><?php esc_html_e('Status', 'wc-telebirr-payment'); ?></th>
+                        <th><?php esc_html_e('Transaction ID', 'wc-telebirr-payment'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($metrics['recent_orders'] as $txn) : ?>
+                    <tr>
+                        <td>
+                            <a href="<?php echo esc_url(admin_url('post.php?post=' . $txn['id'] . '&action=edit')); ?>">
+                                <strong>#<?php echo esc_html($txn['order_number']); ?></strong>
+                            </a>
+                        </td>
+                        <td><?php echo esc_html($txn['date']); ?></td>
+                        <td><?php echo esc_html(trim($txn['customer'])); ?></td>
+                        <td class="telebirr-amount"><?php echo esc_html($currency . number_format($txn['total'], 2)); ?></td>
+                        <td>
+                            <?php
+                            $pill_class = 'telebirr-pill--' . sanitize_html_class($txn['status']);
+                            ?>
+                            <span class="telebirr-pill <?php echo esc_attr($pill_class); ?>">
+                                <?php echo esc_html(ucfirst($txn['status'])); ?>
+                            </span>
+                        </td>
+                        <td><code><?php echo esc_html($txn['transaction_id'] ?: '—'); ?></code></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+        </div>
+
+    </div>
+    <?php
+}
