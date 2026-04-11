@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: WooCommerce Telebirr Payment Gateway
- * Plugin URI: https://github.com/yourusername/wc-telebirr-payment
+ * Plugin URI:  https://github.com/addisdegu22-commits/telebirr-woocomerce
  * Description: Telebirr mobile money payment gateway integration for WooCommerce
- * Version: 1.0.0
- * Author: Your Name
- * Author URI: https://yourwebsite.com
+ * Version: 1.0.6
+ * Author: Degu Addis 
+ * Author URI: https://blackpixel.et
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wc-telebirr-payment
