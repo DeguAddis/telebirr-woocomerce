@@ -15,6 +15,9 @@ The template is a clean Next.js 16 starter with TypeScript and Tailwind CSS 4. I
 - [x] Memory bank documentation
 - [x] Recipe system for common features
 - [x] Added user provided logo to home page (centered on dark background)
+- [x] Added version 1.0.0 detail panel with build timestamp
+- [x] Added detailed documentation comments to page.tsx and layout.tsx
+- [x] Updated logo size to 240px with drop shadow
 
 ## Current Structure
 
