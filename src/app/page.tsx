@@ -29,7 +29,7 @@ export default function Home() {
       
       {/* Application Logo - LCP element with priority loading */}
       <Image
-        src="/images/telebirr-logo.png"
+        src="/img/telebirr-logo.png"
         alt="Telebirr Logo"
         width={240}
         height={240}
