@@ -4,14 +4,14 @@ A complete payment gateway integration for Telebirr mobile money service with Wo
 
 ## Features
 
-✅ Full WooCommerce Payment Gateway integration  
-✅ Test and Live environment support  
-✅ Automatic order status management  
-✅ Secure RSA-SHA256 request signing  
-✅ Webhook callback verification  
-✅ WooCommerce HPOS (High Performance Order Storage) compatible  
-✅ Admin settings panel  
-✅ Seamless checkout flow
+- Full WooCommerce Payment Gateway integration  
+- Test and Live environment support  
+- Automatic order status management  
+- Secure RSA-SHA256 request signing  
+- Webhook callback verification  
+- WooCommerce HPOS (High Performance Order Storage) compatible  
+- Admin settings panel  
+- Seamless checkout flow
 
 ## Requirements
 
