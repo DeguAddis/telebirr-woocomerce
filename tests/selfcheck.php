@@ -95,6 +95,35 @@ telebirr_check(
     'checkout URL follows the portal rawRequest layout'
 );
 
+// Simplified checkout: virtual-only carts, email always required
+$settings_backup = get_option('woocommerce_telebirr_settings', array());
+update_option('woocommerce_telebirr_settings', array_merge($settings_backup, array('hide_billing_fields' => 'yes')));
+wc_load_cart();
+$virtual = new WC_Product_Simple(); $virtual->set_name('Selfcheck ticket'); $virtual->set_regular_price('10'); $virtual->set_virtual(true); $virtual->save();
+$physical = new WC_Product_Simple(); $physical->set_name('Selfcheck shirt'); $physical->set_regular_price('10'); $physical->save();
+
+$errors_for = function ($method) {
+    $e = new WP_Error();
+    foreach (array('billing_first_name_required', 'billing_address_1_required', 'billing_email_required', 'validation') as $code) {
+        $e->add($code, $code);
+    }
+    wc_telebirr_relax_hidden_field_validation(array('payment_method' => $method), $e);
+    return $e->get_error_codes();
+};
+
+WC()->cart->empty_cart();
+WC()->cart->add_to_cart($virtual->get_id());
+telebirr_check(wc_telebirr_cart_is_virtual() && wc_telebirr_simplify_checkout_enabled(), 'virtual-only cart enables simplified checkout');
+telebirr_check($errors_for('telebirr') === array('billing_email_required', 'validation'), 'telebirr + virtual cart drops only hidden-field required errors (email and format errors kept)');
+telebirr_check(count($errors_for('cod')) === 4, 'other payment methods keep every billing error');
+
+WC()->cart->add_to_cart($physical->get_id());
+telebirr_check(!wc_telebirr_cart_is_virtual() && count($errors_for('telebirr')) === 4, 'a physical item restores full billing validation for telebirr');
+
+WC()->cart->empty_cart();
+$virtual->delete(true); $physical->delete(true);
+update_option('woocommerce_telebirr_settings', $settings_backup);
+
 $currency = function () { return 'USD'; };
 add_filter('woocommerce_currency', $currency);
 telebirr_check(!$gateway->is_available(), 'gateway hidden when store currency is not ETB');

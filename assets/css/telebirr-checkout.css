@@ -175,3 +175,20 @@
     color: #1E293B;
     font-size: 16px;
 }
+
+/* Payment box under the Telebirr option */
+.wc-telebirr-payment-box p {
+    margin: 0 0 8px;
+}
+
+.wc-telebirr-total {
+    padding: 8px 12px;
+    background: #fff;
+    border-left: 4px solid #0066B3;
+    color: #1E293B;
+}
+
+.wc-telebirr-instructions {
+    color: #475569;
+    font-size: 13px;
+}

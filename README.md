@@ -48,6 +48,13 @@ A complete payment gateway integration for Telebirr mobile money service with Wo
 2. Enter your production credentials
 3. Verify webhook URL is accessible publicly
 
+### Checkout Options
+- **Show Order Total**: shows the order total in the Telebirr payment box at checkout (on by default).
+- **Simplify Checkout**: hides billing fields when Telebirr is selected, but only when every cart item is virtual. Email stays required and validated, and orders with physical items keep the full billing form.
+- These options apply to the classic (shortcode) checkout. The plugin does not yet integrate with the WooCommerce Checkout block.
+
+Paying directly to a personal phone number is intentionally not supported: Telebirr's createOrder API has no such field (payments go to the merchant short code).
+
 ## Webhook Configuration
 
 The plugin sends its notification URL to Telebirr with every order. It is:
