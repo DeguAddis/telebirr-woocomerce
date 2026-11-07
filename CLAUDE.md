@@ -11,6 +11,10 @@ WooCommerce payment gateway for Telebirr (Fabric Gateway API / H5 C2B). The plug
 - Non-success callbacks (status 1/3/4) are ignored for orders that are already paid.
 - HPOS compatibility declared on `before_woocommerce_init`.
 - Admin transactions dashboard: `wc_telebirr_register_dashboard_menu`, `wc_telebirr_get_metrics()`, `wc_telebirr_render_dashboard()`.
+- Checkout box: `payment_fields()` (setting `show_order_total`). Admin page shows the live callback URL and a missing-credentials notice in `admin_options()`.
+- Simplified checkout (setting `hide_billing_fields`): `wc_telebirr_cart_is_virtual()`, `wc_telebirr_mark_hideable_fields()` tags rows for `assets/js/telebirr-checkout.js`, and `wc_telebirr_relax_hidden_field_validation()` removes only `{field}_required` errors. It applies only to virtual-only carts with Telebirr, never to `billing_email`, and only on the classic checkout.
+- The plugin has no Checkout block integration. New WooCommerce stores use the block checkout, where Telebirr may not appear at all until a blocks integration is added.
+- The old branch `direct-to-phone-number-option` was ported selectively (Nov 2026). Its DIRECT_TO_PHONE/receiver_msisdn fields were dropped: they're not in the Telebirr spec.
 
 ## Gotchas
 

@@ -104,7 +104,7 @@ function wc_telebirr_init_gateway() {
         public function __construct() {
             $this->id                 = 'telebirr';
             $this->icon               = apply_filters('woocommerce_telebirr_icon', plugins_url('assets/img/telebirr-logo.png', __FILE__));
-            $this->has_fields         = false;
+            $this->has_fields         = true;
             $this->method_title       = __('Telebirr', 'wc-telebirr-payment');
             $this->method_description = __('Accept payments via Telebirr mobile money service from Ethio Telecom.', 'wc-telebirr-payment');
 
@@ -188,6 +188,34 @@ function wc_telebirr_init_gateway() {
                 array(),
                 WC_TELEBIRR_VERSION
             );
+            if (wc_telebirr_simplify_checkout_enabled()) {
+                wp_enqueue_script(
+                    'telebirr-checkout-js',
+                    plugins_url('assets/js/telebirr-checkout.js', __FILE__),
+                    array('jquery'),
+                    WC_TELEBIRR_VERSION,
+                    true
+                );
+            }
+        }
+
+        /**
+         * Payment box shown under the Telebirr option at checkout
+         */
+        public function payment_fields() {
+            echo '<div class="wc-telebirr-payment-box">';
+            if ($this->description) {
+                echo wp_kses_post(wpautop(wptexturize($this->description)));
+            }
+            if ('yes' === $this->get_option('show_order_total', 'yes') && WC()->cart) {
+                echo '<p class="wc-telebirr-total"><strong>';
+                /* translators: %s: formatted order total */
+                printf(esc_html__('Order total: %s', 'wc-telebirr-payment'), wp_kses_post(WC()->cart->get_total()));
+                echo '</strong></p>';
+            }
+            echo '<p class="wc-telebirr-instructions">'
+                . esc_html__('After placing your order you will be redirected to the secure Telebirr payment page.', 'wc-telebirr-payment')
+                . '</p></div>';
         }
 
         /**
@@ -226,6 +254,18 @@ function wc_telebirr_init_gateway() {
                 </span>
             </div>
             <?php endif; ?>
+            <?php if (empty($this->fabric_app_id) || empty($this->app_secret)) : ?>
+            <div class="notice notice-error inline">
+                <p><strong><?php esc_html_e('Telebirr configuration required', 'wc-telebirr-payment'); ?></strong> &ndash;
+                <?php esc_html_e('Enter the Fabric App ID and App Secret for the current mode before enabling payments.', 'wc-telebirr-payment'); ?></p>
+            </div>
+            <?php endif; ?>
+            <p class="telebirr-callback-url">
+                <strong><?php esc_html_e('Notify (callback) URL:', 'wc-telebirr-payment'); ?></strong>
+                <input type="text" readonly onclick="this.select();" class="large-text code"
+                    value="<?php echo esc_attr(WC()->api_request_url('telebirr_callback', true)); ?>">
+                <span class="description"><?php esc_html_e('Sent to Telebirr with every order. It must be public HTTPS and whitelisted by Telebirr.', 'wc-telebirr-payment'); ?></span>
+            </p>
             <table class="form-table">
                 <?php $this->generate_settings_html(); ?>
             </table>
@@ -311,6 +351,20 @@ function wc_telebirr_init_gateway() {
                     'type'        => 'textarea',
                     'description' => __('This controls the description which the user sees during checkout.', 'wc-telebirr-payment'),
                     'default'     => __('Pay securely using your Telebirr mobile money account.', 'wc-telebirr-payment'),
+                ),
+                'show_order_total' => array(
+                    'title'       => __('Show Order Total', 'wc-telebirr-payment'),
+                    'type'        => 'checkbox',
+                    'label'       => __('Show the order total in the Telebirr payment box at checkout', 'wc-telebirr-payment'),
+                    'default'     => 'yes',
+                ),
+                'hide_billing_fields' => array(
+                    'title'       => __('Simplify Checkout', 'wc-telebirr-payment'),
+                    'type'        => 'checkbox',
+                    'label'       => __('Hide billing fields for virtual-only orders paid with Telebirr', 'wc-telebirr-payment'),
+                    'default'     => 'no',
+                    'description' => __('Only applies when every cart item is virtual. Email is always required. Orders with physical items keep the full billing form.', 'wc-telebirr-payment'),
+                    'desc_tip'    => true,
                 ),
                 'receive_name' => array(
                     'title'       => __('Receiver Name', 'wc-telebirr-payment'),
@@ -1270,6 +1324,79 @@ function wc_telebirr_plugin_action_links($links) {
     );
     
     return array_merge($plugin_links, $links);
+}
+
+// =====================================================================
+// Simplified checkout for virtual-only carts
+// ponytail: classic (shortcode) checkout only; the Checkout block ignores these hooks.
+// =====================================================================
+
+/**
+ * Billing fields that may be hidden. billing_email is deliberately absent: it stays required.
+ */
+function wc_telebirr_hideable_billing_fields() {
+    return array(
+        'billing_first_name', 'billing_last_name', 'billing_company', 'billing_country',
+        'billing_address_1', 'billing_address_2', 'billing_city', 'billing_state',
+        'billing_postcode', 'billing_phone',
+    );
+}
+
+/**
+ * True when every cart item is virtual, so no billing address is copied into a shipping address.
+ */
+function wc_telebirr_cart_is_virtual() {
+    if (!function_exists('WC') || !WC()->cart || WC()->cart->is_empty()) {
+        return false;
+    }
+    foreach (WC()->cart->get_cart() as $item) {
+        if (empty($item['data']) || !$item['data']->is_virtual()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Setting on and the cart is virtual-only.
+ */
+function wc_telebirr_simplify_checkout_enabled() {
+    $settings = get_option('woocommerce_telebirr_settings', array());
+    return isset($settings['hide_billing_fields']) && 'yes' === $settings['hide_billing_fields'] && wc_telebirr_cart_is_virtual();
+}
+
+add_filter('woocommerce_checkout_fields', 'wc_telebirr_mark_hideable_fields', 999);
+
+/**
+ * Tag hideable billing fields so the checkout JS can hide them while Telebirr is selected.
+ * Required flags are left alone, so other payment methods keep normal validation.
+ */
+function wc_telebirr_mark_hideable_fields($fields) {
+    if (!wc_telebirr_simplify_checkout_enabled()) {
+        return $fields;
+    }
+    foreach (wc_telebirr_hideable_billing_fields() as $key) {
+        if (isset($fields['billing'][$key])) {
+            $fields['billing'][$key]['class'][] = 'telebirr-hideable';
+        }
+    }
+    return $fields;
+}
+
+add_action('woocommerce_after_checkout_validation', 'wc_telebirr_relax_hidden_field_validation', 10, 2);
+
+/**
+ * Drop only the "is a required field" errors for hidden fields, and only for Telebirr on a
+ * virtual-only cart (re-checked here so posting payment_method=telebirr can't skip
+ * validation for physical goods). Email and all format checks stay in force.
+ */
+function wc_telebirr_relax_hidden_field_validation($data, $errors) {
+    if (!isset($data['payment_method']) || 'telebirr' !== $data['payment_method'] || !wc_telebirr_simplify_checkout_enabled()) {
+        return;
+    }
+    foreach (wc_telebirr_hideable_billing_fields() as $key) {
+        $errors->remove($key . '_required');
+    }
 }
 
 // Declare HPOS compatibility
