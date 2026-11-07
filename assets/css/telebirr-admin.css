@@ -1,0 +1,387 @@
+/**
+ * WooCommerce Telebirr Payment Gateway - Admin Styles v1.4.0
+ *
+ * Brand colors:
+ *   Primary Blue:  #0066B3
+ *   Dark Blue:     #004E8C
+ *   Gold/Amber:    #F5A623
+ *   Light Gold:    #FFF8EC
+ *   Light Blue:    #E8F4FD
+ *   Neutral BG:    #F8F9FB
+ *
+ * Typography:
+ *   Base font:     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+ *                  Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif
+ */
+
+/* =========================================================
+   Global Typography & Base
+   ========================================================= */
+#mainform,
+#mainform .form-table,
+#mainform .form-table th,
+#mainform .form-table td,
+#mainform .form-table label,
+#mainform .form-table input,
+#mainform .form-table textarea,
+#mainform .form-table select,
+#mainform .form-table .description {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+        Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* =========================================================
+   Settings Page Header
+   ========================================================= */
+.telebirr-admin-header {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    background: linear-gradient(135deg, #0066B3 0%, #004E8C 100%);
+    color: #fff;
+    padding: 28px 32px;
+    border-radius: 12px;
+    margin: 20px 0 28px 0;
+    box-shadow: 0 4px 20px rgba(0, 102, 179, 0.20);
+}
+
+.telebirr-admin-header img {
+    width: 68px;
+    height: auto;
+    background: #fff;
+    border-radius: 14px;
+    padding: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+    flex-shrink: 0;
+}
+
+.telebirr-admin-header-text h2 {
+    margin: 0 0 6px 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.3px;
+    line-height: 1.2;
+}
+
+.telebirr-admin-header-text p {
+    margin: 0;
+    font-size: 14.5px;
+    color: rgba(255, 255, 255, 0.88);
+    line-height: 1.5;
+    letter-spacing: 0.1px;
+}
+
+.telebirr-admin-header-badges {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.telebirr-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+}
+
+.telebirr-badge--version {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.telebirr-badge--test {
+    background: #F5A623;
+    color: #3D2600;
+}
+
+.telebirr-badge--live {
+    background: #34C759;
+    color: #fff;
+}
+
+/* =========================================================
+   Settings Table - Section Headings (type="title")
+   ========================================================= */
+#woocommerce_telebirr_enabled,
+.form-table:first-of-type {
+    margin-top: 0;
+}
+
+.wc-settings-sub-title {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    color: #0066B3 !important;
+    padding: 20px 0 8px 0 !important;
+    margin: 0 !important;
+    border-bottom: 2px solid #E8F4FD;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: -0.2px;
+}
+
+.wc-settings-sub-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 22px;
+    background: #F5A623;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+/* Section description text under title headings */
+.form-table + p {
+    color: #64748B;
+    font-size: 13.5px;
+    margin-top: 6px;
+    line-height: 1.5;
+}
+
+/* =========================================================
+   Settings Table - Improved Layout
+   ========================================================= */
+
+/* Section cards */
+#mainform .form-table {
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 8px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+#mainform .form-table tr {
+    border-bottom: 1px solid #F1F5F9;
+}
+
+#mainform .form-table tr:last-child {
+    border-bottom: none;
+}
+
+#mainform .form-table th {
+    padding: 20px 16px 20px 4px;
+    font-weight: 600;
+    color: #1E293B;
+    font-size: 14px;
+    vertical-align: top;
+    line-height: 1.5;
+    letter-spacing: -0.1px;
+}
+
+#mainform .form-table td {
+    padding: 20px 4px;
+}
+
+/* Field labels next to checkboxes */
+#mainform .form-table td label {
+    font-size: 14px;
+    color: #334155;
+    line-height: 1.5;
+}
+
+/* Input field styling */
+#mainform .form-table input[type="text"],
+#mainform .form-table input[type="password"],
+#mainform .form-table textarea,
+#mainform .form-table select {
+    border: 1.5px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.5;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background: #F8FAFC;
+    color: #1E293B;
+    width: 100%;
+    max-width: 520px;
+    box-sizing: border-box;
+}
+
+#mainform .form-table input[type="text"]:focus,
+#mainform .form-table input[type="password"]:focus,
+#mainform .form-table textarea:focus,
+#mainform .form-table select:focus {
+    border-color: #0066B3;
+    box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.10);
+    background: #fff;
+    outline: none;
+}
+
+#mainform .form-table input[type="text"]::placeholder,
+#mainform .form-table input[type="password"]::placeholder,
+#mainform .form-table textarea::placeholder {
+    color: #94A3B8;
+    font-size: 13.5px;
+}
+
+/* Textarea specific */
+#mainform .form-table textarea {
+    font-family: 'SF Mono', SFMono-Regular, ui-monospace, Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 90px;
+}
+
+/* Checkbox toggle style */
+#mainform .form-table input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    accent-color: #0066B3;
+    cursor: pointer;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+/* Description text below fields */
+#mainform .form-table .description {
+    color: #64748B;
+    font-size: 12.5px;
+    margin-top: 8px;
+    line-height: 1.5;
+    letter-spacing: 0.05px;
+}
+
+/* =========================================================
+   Test Mode Warning Banner
+   ========================================================= */
+.telebirr-test-mode-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: linear-gradient(135deg, #FFF8EC 0%, #FFF3D6 100%);
+    border: 1px solid #F5D88E;
+    border-left: 4px solid #F5A623;
+    padding: 16px 22px;
+    border-radius: 10px;
+    margin-bottom: 24px;
+    font-size: 14px;
+    color: #7C5E00;
+    line-height: 1.6;
+}
+
+.telebirr-test-mode-banner .dashicons {
+    color: #F5A623;
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   Save Button Styling
+   ========================================================= */
+#mainform .submit .button-primary,
+#mainform p.submit .button-primary {
+    background: linear-gradient(135deg, #0066B3 0%, #004E8C 100%);
+    border: none;
+    border-radius: 8px;
+    padding: 10px 32px;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 2px 10px rgba(0, 102, 179, 0.22);
+    text-shadow: none;
+    letter-spacing: 0.2px;
+    line-height: 1.4;
+}
+
+#mainform .submit .button-primary:hover,
+#mainform p.submit .button-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 18px rgba(0, 102, 179, 0.32);
+}
+
+#mainform .submit .button-primary:active,
+#mainform p.submit .button-primary:active {
+    transform: translateY(0);
+}
+
+/* =========================================================
+   Admin Notice (phpseclib missing)
+   ========================================================= */
+.telebirr-admin-notice {
+    border-left: 4px solid #DC3545;
+    padding: 14px 18px;
+    border-radius: 6px;
+}
+
+.telebirr-admin-notice code {
+    background: #F1F5F9;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    font-family: 'SF Mono', SFMono-Regular, ui-monospace, Consolas, monospace;
+}
+
+/* =========================================================
+   Connection Status Indicator
+   ========================================================= */
+.telebirr-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+}
+
+.telebirr-status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.telebirr-status-dot--active {
+    background: #34C759;
+    box-shadow: 0 0 6px rgba(52, 199, 89, 0.4);
+}
+
+.telebirr-status-dot--inactive {
+    background: #94A3B8;
+}
+
+/* =========================================================
+   Responsive
+   ========================================================= */
+@media screen and (max-width: 782px) {
+    .telebirr-admin-header {
+        flex-direction: column;
+        text-align: center;
+        padding: 24px 20px;
+    }
+
+    .telebirr-admin-header-badges {
+        justify-content: center;
+    }
+
+    #mainform .form-table {
+        padding: 8px 14px;
+    }
+
+    #mainform .form-table th {
+        padding: 14px 8px 6px 4px;
+    }
+
+    #mainform .form-table td {
+        padding: 6px 4px 14px 4px;
+    }
+
+    #mainform .form-table input[type="text"],
+    #mainform .form-table input[type="password"],
+    #mainform .form-table textarea,
+    #mainform .form-table select {
+        max-width: 100%;
+    }
+}

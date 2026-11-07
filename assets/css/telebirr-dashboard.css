@@ -1,0 +1,438 @@
+/**
+ * WooCommerce Telebirr Payment Gateway - Dashboard Styles
+ */
+
+/* =========================================================
+   Base
+   ========================================================= */
+.telebirr-dashboard {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+        Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    max-width: 1200px;
+    padding: 0 0 40px 0;
+}
+
+/* =========================================================
+   Dashboard Header
+   ========================================================= */
+.telebirr-dash-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    background: linear-gradient(135deg, #0066B3 0%, #004E8C 100%);
+    color: #fff;
+    padding: 28px 32px;
+    border-radius: 12px;
+    margin: 20px 0 28px 0;
+    box-shadow: 0 4px 20px rgba(0, 102, 179, 0.18);
+    flex-wrap: wrap;
+}
+
+.telebirr-dash-header-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.telebirr-dash-header img {
+    width: 52px;
+    height: auto;
+    background: #fff;
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+}
+
+.telebirr-dash-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    margin: 0;
+    letter-spacing: -0.3px;
+}
+
+.telebirr-dash-header p {
+    margin: 4px 0 0 0;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.telebirr-dash-header-right {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.telebirr-dash-header-right a {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    text-decoration: none;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 0.2s;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.telebirr-dash-header-right a:hover {
+    background: rgba(255, 255, 255, 0.28);
+    color: #fff;
+}
+
+/* =========================================================
+   Date Filter Bar
+   ========================================================= */
+.telebirr-date-filter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.telebirr-date-filter label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #334155;
+}
+
+.telebirr-date-filter select,
+.telebirr-date-filter input[type="date"] {
+    padding: 8px 14px;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #1E293B;
+    background: #F8FAFC;
+}
+
+.telebirr-date-filter select:focus,
+.telebirr-date-filter input[type="date"]:focus {
+    border-color: #0066B3;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.10);
+}
+
+.telebirr-date-filter .button {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* =========================================================
+   Metric Cards Row
+   ========================================================= */
+.telebirr-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 18px;
+    margin-bottom: 28px;
+}
+
+.telebirr-metric-card {
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 22px 24px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    position: relative;
+    overflow: hidden;
+}
+
+.telebirr-metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+}
+
+.telebirr-metric-card--revenue::before { background: linear-gradient(90deg, #0066B3, #3B9EDB); }
+.telebirr-metric-card--transactions::before { background: linear-gradient(90deg, #F5A623, #FFD166); }
+.telebirr-metric-card--success::before { background: linear-gradient(90deg, #34C759, #6FE08A); }
+.telebirr-metric-card--failed::before { background: linear-gradient(90deg, #EF4444, #F87171); }
+.telebirr-metric-card--pending::before { background: linear-gradient(90deg, #F59E0B, #FCD34D); }
+.telebirr-metric-card--rate::before { background: linear-gradient(90deg, #8B5CF6, #A78BFA); }
+
+.telebirr-metric-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    font-size: 20px;
+}
+
+.telebirr-metric-card--revenue .telebirr-metric-icon { background: #E8F4FD; color: #0066B3; }
+.telebirr-metric-card--transactions .telebirr-metric-icon { background: #FFF8EC; color: #F5A623; }
+.telebirr-metric-card--success .telebirr-metric-icon { background: #ECFDF5; color: #059669; }
+.telebirr-metric-card--failed .telebirr-metric-icon { background: #FEF2F2; color: #DC2626; }
+.telebirr-metric-card--pending .telebirr-metric-icon { background: #FFFBEB; color: #D97706; }
+.telebirr-metric-card--rate .telebirr-metric-icon { background: #F3F0FF; color: #7C3AED; }
+
+.telebirr-metric-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.telebirr-metric-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1E293B;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+}
+
+.telebirr-metric-sub {
+    font-size: 12.5px;
+    color: #94A3B8;
+    margin-top: 6px;
+}
+
+/* =========================================================
+   Chart Container
+   ========================================================= */
+.telebirr-chart-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    margin-bottom: 28px;
+}
+
+.telebirr-chart-card {
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 24px 28px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.telebirr-chart-card h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1E293B;
+    margin: 0 0 20px 0;
+    letter-spacing: -0.2px;
+}
+
+.telebirr-chart-canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 260px;
+}
+
+.telebirr-chart-canvas-wrap canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Status breakdown list (for donut chart card) */
+.telebirr-status-list {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0 0 0;
+}
+
+.telebirr-status-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #F1F5F9;
+    font-size: 14px;
+    color: #334155;
+}
+
+.telebirr-status-list li:last-child {
+    border-bottom: none;
+}
+
+.telebirr-status-list .telebirr-sl-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.telebirr-status-dot-lg {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.telebirr-status-list .telebirr-sl-count {
+    font-weight: 700;
+    color: #1E293B;
+}
+
+/* =========================================================
+   Recent Transactions Table
+   ========================================================= */
+.telebirr-table-card {
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 24px 28px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    margin-bottom: 28px;
+    overflow-x: auto;
+}
+
+.telebirr-table-card h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1E293B;
+    margin: 0 0 18px 0;
+}
+
+.telebirr-txn-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+}
+
+.telebirr-txn-table thead th {
+    background: #F8FAFC;
+    color: #64748B;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 2px solid #E2E8F0;
+    white-space: nowrap;
+}
+
+.telebirr-txn-table tbody td {
+    padding: 14px 16px;
+    color: #334155;
+    border-bottom: 1px solid #F1F5F9;
+    vertical-align: middle;
+}
+
+.telebirr-txn-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.telebirr-txn-table tbody tr:hover {
+    background: #F8FAFC;
+}
+
+/* Status pills */
+.telebirr-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+
+.telebirr-pill--completed {
+    background: #ECFDF5;
+    color: #059669;
+}
+
+.telebirr-pill--processing {
+    background: #E8F4FD;
+    color: #0066B3;
+}
+
+.telebirr-pill--pending {
+    background: #FFFBEB;
+    color: #D97706;
+}
+
+.telebirr-pill--failed {
+    background: #FEF2F2;
+    color: #DC2626;
+}
+
+.telebirr-pill--cancelled {
+    background: #F1F5F9;
+    color: #64748B;
+}
+
+.telebirr-pill--refunded {
+    background: #F3F0FF;
+    color: #7C3AED;
+}
+
+/* Amount column */
+.telebirr-amount {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Empty state */
+.telebirr-empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: #94A3B8;
+}
+
+.telebirr-empty-state .dashicons {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+}
+
+.telebirr-empty-state p {
+    font-size: 15px;
+    margin: 0;
+}
+
+/* =========================================================
+   Responsive
+   ========================================================= */
+@media screen and (max-width: 960px) {
+    .telebirr-chart-row {
+        grid-template-columns: 1fr;
+    }
+
+    .telebirr-metrics {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media screen and (max-width: 600px) {
+    .telebirr-dash-header {
+        flex-direction: column;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .telebirr-dash-header-left {
+        flex-direction: column;
+    }
+
+    .telebirr-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .telebirr-date-filter {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .telebirr-table-card {
+        padding: 16px;
+    }
+}
