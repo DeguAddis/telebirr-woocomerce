@@ -30,9 +30,11 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Check if WooCommerce is active
-if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
-    return;
+define('WC_TELEBIRR_VERSION', '1.4.1');
+
+// phpseclib (RSA-PSS) comes from `composer install` in this folder
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
 }
 
 // Register the payment gateway with WooCommerce
@@ -52,10 +54,10 @@ function wc_telebirr_init_gateway() {
     if (!class_exists('\phpseclib3\Crypt\PublicKeyLoader')) {
         add_action('admin_notices', function () {
             echo '<div class="error"><p><strong>WooCommerce Telebirr:</strong> '
-                . esc_html__('The phpseclib/phpseclib (^3.0) library is required. Please run: composer require phpseclib/phpseclib:^3.0', 'wc-telebirr-payment')
+                . esc_html__('The phpseclib/phpseclib (^3.0) library is required. Please run composer install in the plugin folder.', 'wc-telebirr-payment')
                 . '</p></div>';
         });
-        // Continue loading so settings are still accessible, but signing will fail gracefully
+        // Continue loading so settings are still accessible; signing and verification fail until it is installed
     }
 
     class WC_Gateway_Telebirr extends WC_Payment_Gateway {
@@ -132,11 +134,11 @@ function wc_telebirr_init_gateway() {
             // API URLs
             $this->base_url           = $this->testmode
                 ? 'https://developerportal.ethiotelebirr.et:38443/apiaccess/payment/gateway'
-                : 'https://telebirrappcube.ethiomobilemoney.et:38443/apiaccess/payment/gateway';
+                : 'https://superapp.ethiomobilemoney.et:38443/apiaccess/payment/gateway';
             
             $this->web_base_url       = $this->testmode
                 ? 'https://developerportal.ethiotelebirr.et:38443/payment/web/paygate?'
-                : 'https://telebirrappcube.ethiomobilemoney.et:38443/payment/web/paygate?';
+                : 'https://superapp.ethiomobilemoney.et:38443/payment/web/paygate?';
 
             // Actions
             add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
@@ -169,7 +171,7 @@ function wc_telebirr_init_gateway() {
                 'telebirr-admin-css',
                 plugins_url('assets/css/telebirr-admin.css', __FILE__),
                 array(),
-                '1.4.0'
+                WC_TELEBIRR_VERSION
             );
         }
 
@@ -184,7 +186,7 @@ function wc_telebirr_init_gateway() {
                 'telebirr-checkout-css',
                 plugins_url('assets/css/telebirr-checkout.css', __FILE__),
                 array(),
-                '1.4.0'
+                WC_TELEBIRR_VERSION
             );
         }
 
@@ -194,7 +196,7 @@ function wc_telebirr_init_gateway() {
         public function admin_options() {
             $logo_url = plugins_url('assets/img/telebirr-logo.png', __FILE__);
             $mode = $this->testmode ? 'test' : 'live';
-            $version = '1.4.0';
+            $version = WC_TELEBIRR_VERSION;
             ?>
             <div class="telebirr-admin-header">
                 <img src="<?php echo esc_url($logo_url); ?>" alt="Telebirr">
@@ -269,42 +271,21 @@ function wc_telebirr_init_gateway() {
         }
 
         /**
-         * Generate a millisecond-precision Unix timestamp as required by the Telebirr spec.
+         * Request timestamp: UTC Unix time in seconds, per the preOrder spec.
          *
-         * The official Telebirr H5 C2B spec states:
-         * "The timestamp should be in milliseconds. Use unix timestamp."
-         * Example from spec: 1624546517701
-         *
-         * @return string Millisecond timestamp as string
+         * @return string
          */
-        private function get_timestamp_ms() {
-            return (string) round(microtime(true) * 1000);
+        private function get_timestamp() {
+            return (string) time();
         }
 
         /**
-         * Sanitize and validate a value for use as merch_order_id (outTradeNo).
+         * Telebirr only charges in ETB, so hide the gateway for stores priced in anything else.
          *
-         * Per the Telebirr spec, outTradeNo only supports digits, letters, and underscores.
-         * This method strips any disallowed characters and logs a warning if modifications were made.
-         *
-         * @param string $order_id The raw order identifier
-         * @return string Sanitized order ID safe for Telebirr
+         * @return bool
          */
-        private function sanitize_order_id($order_id) {
-            $sanitized = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $order_id);
-
-            if ($sanitized !== (string) $order_id) {
-                $this->logger->warning(
-                    sprintf(
-                        'Order ID "%s" contained characters not allowed by Telebirr (digits, letters, underscores only). Sanitized to "%s".',
-                        $order_id,
-                        $sanitized
-                    ),
-                    array('source' => 'telebirr')
-                );
-            }
-
-            return $sanitized;
+        public function is_available() {
+            return get_woocommerce_currency() === 'ETB' && parent::is_available();
         }
 
         /**
@@ -519,7 +500,7 @@ function wc_telebirr_init_gateway() {
          */
         private function get_fabric_token() {
             // Check for cached token
-            $transient_key = 'telebirr_fabric_token_' . ($this->testmode ? 'test' : 'live');
+            $transient_key = $this->token_transient_key();
             $cached_token = get_transient($transient_key);
 
             if ($cached_token !== false) {
@@ -537,6 +518,7 @@ function wc_telebirr_init_gateway() {
                     'appSecret' => $this->app_secret,
                 )),
                 'sslverify' => true,
+                'sslcertificates' => $this->ca_bundle(),
                 'timeout'   => 30,
             ));
 
@@ -573,6 +555,32 @@ function wc_telebirr_init_gateway() {
         }
 
         /**
+         * CA file for Telebirr requests. The sandbox host does not send GlobalSign's intermediate
+         * certificate, so test mode trusts a bundled GlobalSign GCC R3 EV intermediate + Root R3.
+         * ponytail: pinned to GlobalSign; refresh assets/certs if the sandbox changes CA.
+         *
+         * @return string
+         */
+        private function ca_bundle() {
+            return $this->testmode
+                ? __DIR__ . '/assets/certs/telebirr-sandbox-ca.pem'
+                : ABSPATH . WPINC . '/certificates/ca-bundle.crt';
+        }
+
+        private function token_transient_key() {
+            return 'telebirr_fabric_token_' . ($this->testmode ? 'test' : 'live');
+        }
+
+        /**
+         * Save settings and drop cached tokens so new credentials take effect immediately
+         */
+        public function process_admin_options() {
+            delete_transient('telebirr_fabric_token_test');
+            delete_transient('telebirr_fabric_token_live');
+            return parent::process_admin_options();
+        }
+
+        /**
          * Create order in Telebirr system
          *
          * @param WC_Order $order The WooCommerce order
@@ -582,18 +590,17 @@ function wc_telebirr_init_gateway() {
         private function create_telebirr_order($order, $token) {
             $url = $this->base_url . '/payment/v1/merchant/preOrder';
             
-            // Use millisecond timestamp per Telebirr spec
-            $timestamp = $this->get_timestamp_ms();
+            $timestamp = $this->get_timestamp();
             $nonce = $this->generate_nonce();
             
             $order_id = $order->get_id();
-
-            // Sanitize order ID for Telebirr (digits, letters, underscores only)
-            $merch_order_id = $this->sanitize_order_id($order_id);
+            // WooCommerce IDs are integers, so this already meets Telebirr's digits/letters/underscore rule
+            $merch_order_id = (string) $order_id;
             $amount = number_format($order->get_total(), 2, '.', '');
 
             // Enforce HTTPS for notifyUrl as required by Telebirr spec
-            $notify_url = home_url('/wc-api/telebirr_callback', 'https');
+            // api_request_url() works with plain and pretty permalinks
+            $notify_url = WC()->api_request_url('telebirr_callback', true);
             if (strpos($notify_url, 'https://') !== 0) {
                 $this->logger->error(
                     'Cannot generate HTTPS notify_url. Telebirr requires HTTPS for callback endpoints.',
@@ -615,7 +622,9 @@ function wc_telebirr_init_gateway() {
                 'merch_code'      => $this->merchant_code,
                 'merch_order_id'  => $merch_order_id,
                 'trade_type'      => 'Checkout',
-                'title'           => sprintf(__('Order #%s', 'wc-telebirr-payment'), $merch_order_id),
+                'business_type'   => 'BuyGoods',
+                // Telebirr rejects ~`!#$%^*()-+=|/<>?;:"[]{}\& in title (sandbox error 49401024995)
+                'title'           => preg_replace('/[~`!#$%^*()\-+=|\/<>?;:"\[\]{}\\\\&]/', '', sprintf(__('Order %s', 'wc-telebirr-payment'), $merch_order_id)),
                 'total_amount'    => $amount,
                 'trans_currency'  => 'ETB',
                 'timeout_express' => '120m',
@@ -651,6 +660,7 @@ function wc_telebirr_init_gateway() {
                 ),
                 'body'      => wp_json_encode($request),
                 'sslverify' => true,
+                'sslcertificates' => $this->ca_bundle(),
                 'timeout'   => 30,
             ));
 
@@ -670,6 +680,9 @@ function wc_telebirr_init_gateway() {
                     sprintf('Telebirr preOrder returned HTTP %d for order #%d', $status_code, $order_id),
                     array('source' => 'telebirr')
                 );
+                if ($status_code === 401) {
+                    delete_transient($this->token_transient_key());
+                }
                 return false;
             }
             
@@ -696,16 +709,18 @@ function wc_telebirr_init_gateway() {
                 'merch_code' => $this->merchant_code,
                 'nonce_str'  => $this->generate_nonce(),
                 'prepay_id'  => $prepay_id,
-                'timestamp'  => $this->get_timestamp_ms(),
+                'timestamp'  => $this->get_timestamp(),
             );
 
-            $signature = $this->sign_request($params);
-            $params['sign'] = $signature;
+            $params['sign'] = $this->sign_request($params);
             $params['sign_type'] = 'SHA256WithRSA';
-            $params['version'] = '1.0';
-            $params['trade_type'] = 'Checkout';
 
-            return $this->web_base_url . http_build_query($params);
+            // Raw key=value join like the portal's createRawRequest demo, then the fixed otherParams
+            $raw = array();
+            foreach ($params as $key => $value) {
+                $raw[] = $key . '=' . $value;
+            }
+            return $this->web_base_url . implode('&', $raw) . '&version=1.0&trade_type=Checkout';
         }
 
         /**
@@ -718,226 +733,92 @@ function wc_telebirr_init_gateway() {
         }
 
         /**
-         * Sign request using RSA-PSS (SHA256, MGF1-SHA256, salt length 32) as required
-         * by the Telebirr H5 C2B specification.
+         * Build the Telebirr signing string (portal "RequestSignatureProcess"): biz_content fields are
+         * merged into the top level, excluded fields dropped, keys sorted, joined as key=value&...
          *
-         * Uses phpseclib3 for RSA-PSS support since PHP's native openssl_sign() only
-         * supports PKCS#1 v1.5 padding, not PSS.
+         * @param array $data Request or notify payload
+         * @return string
+         */
+        private function build_sign_string($data) {
+            $exclude = array('sign', 'sign_type', 'header', 'refund_info', 'openType', 'raw_request', 'biz_content', 'wallet_reference_data');
+
+            $fields = array();
+            $sources = array($data);
+            if (isset($data['biz_content']) && is_array($data['biz_content'])) {
+                $sources[] = $data['biz_content'];
+            }
+            foreach ($sources as $source) {
+                foreach ($source as $key => $value) {
+                    if (!in_array($key, $exclude, true) && is_scalar($value)) {
+                        $fields[$key] = (string) $value;
+                    }
+                }
+            }
+            ksort($fields, SORT_STRING);
+
+            $sign_parts = array();
+            foreach ($fields as $key => $value) {
+                $sign_parts[] = $key . '=' . $value;
+            }
+            return implode('&', $sign_parts);
+        }
+
+        /**
+         * Load an RSA key configured for Telebirr's RSA-PSS (SHA256, MGF1-SHA256, salt 32).
+         * Throws if phpseclib is missing or the key cannot be parsed.
          *
-         * Handles both flat and nested (biz_content) parameter structures by JSON-encoding
-         * array values before including them in the signing string.
+         * @param string $pem PEM-encoded key
+         * @return object phpseclib3 key
+         */
+        private function load_pss_key($pem) {
+            if (!class_exists('\phpseclib3\Crypt\PublicKeyLoader')) {
+                throw new \Exception('phpseclib3 is not installed; run composer install in the plugin folder');
+            }
+            return \phpseclib3\Crypt\PublicKeyLoader::load($pem)
+                ->withHash('sha256')
+                ->withMGFHash('sha256')
+                ->withSaltLength(32);
+        }
+
+        /**
+         * Sign request using RSA-PSS as required by the Telebirr H5 C2B specification.
          *
          * @param array $data The request data to sign
          * @return string Base64-encoded signature, or empty string on failure
          */
         private function sign_request($data) {
-            // Flatten nested arrays to JSON strings for signing
-            $flat_data = array();
-            foreach ($data as $key => $value) {
-                if ($key === 'sign' || $key === 'sign_type' || $value === '') {
-                    continue;
-                }
-                if (is_array($value)) {
-                    $flat_data[$key] = wp_json_encode($value);
-                } else {
-                    $flat_data[$key] = $value;
-                }
-            }
-
-            // Sort parameters alphabetically
-            ksort($flat_data);
-            
-            // Build signing string
-            $sign_parts = array();
-            foreach ($flat_data as $key => $value) {
-                $sign_parts[] = $key . '=' . $value;
-            }
-            $sign_string = implode('&', $sign_parts);
-
-            // Use phpseclib3 for RSA-PSS signing (Telebirr spec requirement)
-            if (class_exists('\phpseclib3\Crypt\PublicKeyLoader')) {
-                return $this->sign_with_phpseclib($sign_string);
-            }
-
-            // Fallback to openssl_sign with PKCS#1 v1.5 if phpseclib is not available
-            // WARNING: This may not be accepted by Telebirr in production
-            $this->logger->warning(
-                'phpseclib3 not available, falling back to PKCS#1 v1.5 signing. '
-                . 'Install phpseclib/phpseclib:^3.0 for spec-compliant RSA-PSS signatures.',
-                array('source' => 'telebirr')
-            );
-            return $this->sign_with_openssl_fallback($sign_string);
-        }
-
-        /**
-         * Sign a string using RSA-PSS via phpseclib3 (spec-compliant).
-         * Algorithm: RSA-PSS, SHA256, MGF1-SHA256, salt length 32.
-         *
-         * @param string $sign_string The string to sign
-         * @return string Base64-encoded signature, or empty string on failure
-         */
-        private function sign_with_phpseclib($sign_string) {
             try {
-                $key = \phpseclib3\Crypt\PublicKeyLoader::load($this->private_key)
-                    ->withHash('sha256')
-                    ->withMGFHash('sha256')
-                    ->withSaltLength(32);
-
-                $signature = $key->sign($sign_string);
-                return base64_encode($signature);
+                return base64_encode($this->load_pss_key($this->private_key)->sign($this->build_sign_string($data)));
             } catch (\Exception $e) {
-                $this->logger->error(
-                    'RSA-PSS signing failed (phpseclib): ' . $e->getMessage(),
-                    array('source' => 'telebirr')
-                );
+                $this->logger->error('RSA-PSS signing failed: ' . $e->getMessage(), array('source' => 'telebirr'));
                 return '';
             }
         }
 
         /**
-         * Fallback signing using PHP's native openssl_sign with PKCS#1 v1.5 padding.
-         * WARNING: This does NOT produce RSA-PSS signatures and may be rejected by Telebirr.
-         *
-         * @param string $sign_string The string to sign
-         * @return string Base64-encoded signature, or empty string on failure
-         */
-        private function sign_with_openssl_fallback($sign_string) {
-            $private_key = openssl_pkey_get_private($this->private_key);
-            
-            if (!$private_key) {
-                $this->logger->error(
-                    'Failed to load RSA private key for signing (openssl fallback)',
-                    array('source' => 'telebirr')
-                );
-                return '';
-            }
-
-            $result = openssl_sign($sign_string, $signature, $private_key, OPENSSL_ALGO_SHA256);
-
-            if (!$result) {
-                $this->logger->error(
-                    'RSA signing operation failed (openssl fallback): ' . openssl_error_string(),
-                    array('source' => 'telebirr')
-                );
-                return '';
-            }
-
-            return base64_encode($signature);
-        }
-
-        /**
-         * Verify webhook signature from Telebirr using RSA-PSS (SHA256, MGF1-SHA256, salt 32).
-         * Properly handles nested biz_content by JSON-encoding it for the signing string.
+         * Verify webhook signature from Telebirr using RSA-PSS.
          *
          * @param array $data The full webhook payload
          * @return bool True if signature is valid
          */
         private function verify_signature($data) {
-            if (!isset($data['sign'])) {
-                $this->logger->warning('Signature verification failed: no sign field in payload', array('source' => 'telebirr'));
+            if (!isset($data['sign']) || !is_string($data['sign'])) {
+                $this->logger->warning('Signature verification failed: missing or invalid sign field', array('source' => 'telebirr'));
                 return false;
             }
 
-            $received_sign = base64_decode($data['sign']);
+            $received_sign = base64_decode($data['sign'], true);
             if ($received_sign === false) {
                 $this->logger->warning('Signature verification failed: invalid base64 in sign field', array('source' => 'telebirr'));
                 return false;
             }
 
-            // Remove sign and sign_type from data before building verification string
-            $verify_data = $data;
-            unset($verify_data['sign']);
-            unset($verify_data['sign_type']);
-
-            // Flatten nested arrays to JSON strings (critical: includes biz_content in verification)
-            $flat_data = array();
-            foreach ($verify_data as $key => $value) {
-                if ($value === '') {
-                    continue;
-                }
-                if (is_array($value)) {
-                    $flat_data[$key] = wp_json_encode($value);
-                } else {
-                    $flat_data[$key] = $value;
-                }
-            }
-
-            // Sort parameters alphabetically
-            ksort($flat_data);
-            
-            // Build signing string
-            $sign_parts = array();
-            foreach ($flat_data as $key => $value) {
-                $sign_parts[] = $key . '=' . $value;
-            }
-            $sign_string = implode('&', $sign_parts);
-
-            // Use phpseclib3 for RSA-PSS verification (preferred)
-            if (class_exists('\phpseclib3\Crypt\PublicKeyLoader')) {
-                return $this->verify_with_phpseclib($sign_string, $received_sign);
-            }
-
-            // Fallback to openssl_verify with PKCS#1 v1.5
-            $this->logger->warning(
-                'phpseclib3 not available for verification, falling back to PKCS#1 v1.5.',
-                array('source' => 'telebirr')
-            );
-            return $this->verify_with_openssl_fallback($sign_string, $received_sign);
-        }
-
-        /**
-         * Verify a signature using RSA-PSS via phpseclib3 (spec-compliant).
-         *
-         * @param string $sign_string The original signing string
-         * @param string $signature The raw (decoded) signature bytes
-         * @return bool True if valid
-         */
-        private function verify_with_phpseclib($sign_string, $signature) {
             try {
-                $key = \phpseclib3\Crypt\PublicKeyLoader::load($this->public_key)
-                    ->withHash('sha256')
-                    ->withMGFHash('sha256')
-                    ->withSaltLength(32);
-
-                return $key->verify($sign_string, $signature);
+                return $this->load_pss_key($this->public_key)->verify($this->build_sign_string($data), $received_sign);
             } catch (\Exception $e) {
-                $this->logger->error(
-                    'RSA-PSS verification failed (phpseclib): ' . $e->getMessage(),
-                    array('source' => 'telebirr')
-                );
+                $this->logger->error('RSA-PSS verification failed: ' . $e->getMessage(), array('source' => 'telebirr'));
                 return false;
             }
-        }
-
-        /**
-         * Fallback signature verification using openssl_verify with PKCS#1 v1.5.
-         *
-         * @param string $sign_string The original signing string
-         * @param string $signature The raw (decoded) signature bytes
-         * @return bool True if valid
-         */
-        private function verify_with_openssl_fallback($sign_string, $signature) {
-            $public_key = openssl_pkey_get_public($this->public_key);
-            
-            if (!$public_key) {
-                $this->logger->error(
-                    'Signature verification failed: cannot load Telebirr public key (openssl fallback)',
-                    array('source' => 'telebirr')
-                );
-                return false;
-            }
-
-            $result = openssl_verify($sign_string, $signature, $public_key, OPENSSL_ALGO_SHA256);
-
-            if ($result === -1) {
-                $this->logger->error(
-                    'OpenSSL verify error: ' . openssl_error_string(),
-                    array('source' => 'telebirr')
-                );
-                return false;
-            }
-
-            return $result === 1;
         }
 
         /**
@@ -977,12 +858,7 @@ function wc_telebirr_init_gateway() {
          * @return string The client IP
          */
         private function get_client_ip() {
-            // Check for trusted proxy headers (only if behind a known proxy)
-            if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-                $ips = explode(',', sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR'])));
-                return trim($ips[0]);
-            }
-            
+            // REMOTE_ADDR only: X-Forwarded-For is set by the caller and would bypass the allowlist
             if (!empty($_SERVER['REMOTE_ADDR'])) {
                 return sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
             }
@@ -1008,6 +884,19 @@ function wc_telebirr_init_gateway() {
             }
 
             return ($ip_long & $mask_long) === ($subnet_long & $mask_long);
+        }
+
+        /**
+         * Map the Notify trade_status word to 2 paid, 1 pending, 3 failed, 0 other (logged only).
+         * Paying/Pending mean money moved but is not settled; Expired is "not obvious" per the spec,
+         * so neither changes the order beyond pending.
+         *
+         * @param mixed $raw
+         * @return int
+         */
+        private function map_trade_status($raw) {
+            $map = array('Completed' => 2, 'Paying' => 1, 'Pending' => 1, 'Failure' => 3);
+            return (is_string($raw) && isset($map[$raw])) ? $map[$raw] : 0;
         }
 
         /**
@@ -1090,25 +979,20 @@ function wc_telebirr_init_gateway() {
             $raw_data = file_get_contents('php://input');
             $data = json_decode($raw_data, true);
 
-            if (!$data || !isset($data['biz_content'])) {
+            if (!is_array($data) || empty($data)) {
                 $this->logger->warning(
-                    'Callback rejected: invalid or missing biz_content in payload',
+                    'Callback rejected: payload is not a JSON object',
                     array('source' => 'telebirr')
                 );
                 status_header(400);
                 exit('Invalid request');
             }
 
-            $biz = $data['biz_content'];
-
-            // Timestamp freshness validation
-            // Per Telebirr spec: "The time of the timestamp is consistent with that of
-            // the server (within one minute)." We use a generous 5-minute window for clock skew.
-            $callback_timestamp = 0;
-            if (isset($data['timestamp'])) {
-                $callback_timestamp = intval($data['timestamp']);
-            } elseif (isset($biz['timestamp'])) {
-                $callback_timestamp = intval($biz['timestamp']);
+            // Freshness: notify_time is the (signed) sending time; 5-minute window for clock skew.
+            // The spec says seconds but its sample is in milliseconds, so accept both.
+            $callback_timestamp = isset($data['notify_time']) && is_numeric($data['notify_time']) ? (int) $data['notify_time'] : 0;
+            if ($callback_timestamp > 0 && $callback_timestamp < 100000000000) {
+                $callback_timestamp *= 1000; // seconds to milliseconds
             }
 
             if ($callback_timestamp > 0) {
@@ -1143,7 +1027,7 @@ function wc_telebirr_init_gateway() {
             }
 
             // Get and validate order
-            $order_id = isset($biz['merch_order_id']) ? intval($biz['merch_order_id']) : 0;
+            $order_id = isset($data['merch_order_id']) ? intval($data['merch_order_id']) : 0;
             $order = wc_get_order($order_id);
 
             if (!$order) {
@@ -1170,7 +1054,12 @@ function wc_telebirr_init_gateway() {
             }
 
             // Replay protection: check if this transaction was already processed
-            $transaction_id = isset($biz['trade_no']) ? sanitize_text_field($biz['trade_no']) : '';
+            $transaction_id = '';
+            foreach (array('payment_order_id', 'trans_id') as $field) {
+                if ($transaction_id === '' && isset($data[$field]) && is_scalar($data[$field])) {
+                    $transaction_id = sanitize_text_field((string) $data[$field]);
+                }
+            }
             if (!empty($transaction_id) && $this->is_duplicate_callback($transaction_id, $order_id)) {
                 $this->logger->info(
                     sprintf('Duplicate callback ignored for order #%d, txn: %s', $order_id, $transaction_id),
@@ -1181,31 +1070,56 @@ function wc_telebirr_init_gateway() {
             }
 
             // Check payment status
-            $status = isset($biz['trade_status']) ? intval($biz['trade_status']) : 0;
+            $status = $this->map_trade_status(isset($data['trade_status']) ? $data['trade_status'] : '');
+
+            // Without a timestamp a signed notice could be replayed later. Completing a payment is safe
+            // (amount-checked, ignored once paid); other status changes are skipped.
+            if ($status !== 2 && $callback_timestamp === 0) {
+                $this->logger->warning(
+                    sprintf('Ignored trade_status %d for order #%d: callback has no timestamp', $status, $order_id),
+                    array('source' => 'telebirr')
+                );
+                $status = -1;
+            }
+
+            // A late or replayed non-success notice must never undo a paid order
+            if ($status !== 2 && $status !== -1 && $order->is_paid()) {
+                $this->logger->warning(
+                    sprintf('Ignored trade_status %d for already paid order #%d', $status, $order_id),
+                    array('source' => 'telebirr')
+                );
+                $status = -1;
+            }
 
             switch ($status) {
+                case -1:
+                    break;
+
                 case 2: // Payment successful
                     if (!$order->is_paid()) {
                         // Verify payment amount matches order total
-                        $paid_amount = isset($biz['total_amount']) ? floatval($biz['total_amount']) : 0;
+                        $paid_amount = isset($data['total_amount']) ? floatval($data['total_amount']) : 0;
                         $order_total = floatval($order->get_total());
 
-                        if (abs($paid_amount - $order_total) > 0.01) {
+                        // Telebirr always charges ETB, so a non-ETB order total is not comparable
+                        if ($order->get_currency() !== 'ETB' || abs($paid_amount - $order_total) > 0.01) {
                             $this->logger->error(
                                 sprintf(
-                                    'Amount mismatch for order #%d: paid=%.2f expected=%.2f',
+                                    'Amount mismatch for order #%d: paid=%.2f ETB expected=%.2f %s',
                                     $order_id,
                                     $paid_amount,
-                                    $order_total
+                                    $order_total,
+                                    $order->get_currency()
                                 ),
                                 array('source' => 'telebirr')
                             );
                             $order->update_status(
                                 'on-hold',
                                 sprintf(
-                                    __('Telebirr amount mismatch: paid %.2f ETB, expected %.2f ETB. Manual review required.', 'wc-telebirr-payment'),
+                                    __('Telebirr amount mismatch: paid %.2f ETB, expected %.2f %s. Manual review required.', 'wc-telebirr-payment'),
                                     $paid_amount,
-                                    $order_total
+                                    $order_total,
+                                    $order->get_currency()
                                 )
                             );
                             break;
@@ -1245,17 +1159,9 @@ function wc_telebirr_init_gateway() {
                     );
                     break;
                     
-                case 4: // Payment cancelled
-                    $order->update_status('cancelled', __('Telebirr payment cancelled by user', 'wc-telebirr-payment'));
-                    $this->logger->info(
-                        sprintf('Payment cancelled for order #%d', $order_id),
-                        array('source' => 'telebirr')
-                    );
-                    break;
-
                 default:
                     $this->logger->warning(
-                        sprintf('Unknown trade_status %d for order #%d', $status, $order_id),
+                        sprintf('Unhandled trade_status "%s" for order #%d', isset($data['trade_status']) && is_scalar($data['trade_status']) ? $data['trade_status'] : '', $order_id),
                         array('source' => 'telebirr')
                     );
                     break;
@@ -1406,165 +1312,114 @@ function wc_telebirr_dashboard_assets($hook) {
         'telebirr-dashboard-css',
         plugins_url('assets/css/telebirr-dashboard.css', __FILE__),
         array(),
-        '1.4.0'
+        WC_TELEBIRR_VERSION
     );
     wp_enqueue_script(
         'telebirr-dashboard-js',
         plugins_url('assets/js/telebirr-dashboard.js', __FILE__),
         array(),
-        '1.4.0',
+        WC_TELEBIRR_VERSION,
         true
     );
 }
 
 /**
  * Query Telebirr order metrics from WooCommerce orders.
- * Uses WC HPOS-compatible queries via wc_get_orders().
+ * Uses WC HPOS-compatible queries via wc_get_orders(). Counts come from paginated
+ * totals and revenue is summed page by page, so memory stays flat as orders grow.
  *
  * @param string $period 'today', '7days', '30days', '12months', 'all'
  * @return array Metrics data
  */
 function wc_telebirr_get_metrics($period = '30days') {
-    $date_after = '';
-    $now = current_time('timestamp');
-
-    switch ($period) {
-        case 'today':
-            $date_after = gmdate('Y-m-d', $now);
-            break;
-        case '7days':
-            $date_after = gmdate('Y-m-d', strtotime('-7 days', $now));
-            break;
-        case '30days':
-            $date_after = gmdate('Y-m-d', strtotime('-30 days', $now));
-            break;
-        case '12months':
-            $date_after = gmdate('Y-m-d', strtotime('-12 months', $now));
-            break;
-        case 'all':
-        default:
-            $date_after = '';
-            break;
-    }
-
-    $args = array(
-        'payment_method' => 'telebirr',
-        'limit'          => -1,
-        'return'         => 'objects',
-        'orderby'        => 'date',
-        'order'          => 'DESC',
+    $offsets = array(
+        'today'    => 'today',
+        '7days'    => '-7 days',
+        '30days'   => '-30 days',
+        '12months' => '-12 months',
     );
 
-    if (!empty($date_after)) {
-        $args['date_created'] = '>=' . $date_after;
+    $base = array('payment_method' => 'telebirr');
+    if (isset($offsets[$period])) {
+        $base['date_created'] = '>=' . gmdate('Y-m-d', strtotime($offsets[$period], current_time('timestamp')));
     }
 
-    $orders = wc_get_orders($args);
+    // Per-status counts without loading orders
+    $counts = array();
+    foreach (array('completed', 'processing', 'pending', 'failed', 'cancelled', 'refunded', 'on-hold') as $status) {
+        $counts[$status] = wc_get_orders($base + array(
+            'status'   => $status,
+            'limit'    => 1,
+            'paginate' => true,
+            'return'   => 'ids',
+        ))->total;
+    }
+    $total_count = wc_get_orders($base + array('limit' => 1, 'paginate' => true, 'return' => 'ids'))->total;
 
+    // Revenue and daily totals from successful orders, 200 at a time
     $total_revenue = 0;
-    $total_count = count($orders);
-    $completed = 0;
-    $processing = 0;
-    $pending = 0;
-    $failed = 0;
-    $cancelled = 0;
-    $refunded = 0;
-    $on_hold = 0;
     $daily_revenue = array();
-    $recent_orders = array();
-
-    foreach ($orders as $order) {
-        $status = $order->get_status();
-        $amount = (float) $order->get_total();
-        $date_key = $order->get_date_created() ? $order->get_date_created()->date('M d') : 'Unknown';
-
-        switch ($status) {
-            case 'completed':
-                $completed++;
-                $total_revenue += $amount;
-                break;
-            case 'processing':
-                $processing++;
-                $total_revenue += $amount;
-                break;
-            case 'pending':
-                $pending++;
-                break;
-            case 'failed':
-                $failed++;
-                break;
-            case 'cancelled':
-                $cancelled++;
-                break;
-            case 'refunded':
-                $refunded++;
-                break;
-            case 'on-hold':
-                $on_hold++;
-                break;
-        }
-
-        // Aggregate daily revenue (only completed/processing)
-        if (in_array($status, array('completed', 'processing'), true)) {
-            if (!isset($daily_revenue[$date_key])) {
-                $daily_revenue[$date_key] = 0;
+    $page = 1;
+    do {
+        $batch = wc_get_orders($base + array(
+            'status' => array('completed', 'processing'),
+            'limit'  => 200,
+            'page'   => $page++,
+        ));
+        foreach ($batch as $order) {
+            $amount = (float) $order->get_total();
+            $total_revenue += $amount;
+            $day = $order->get_date_created() ? $order->get_date_created()->date('Y-m-d') : '';
+            if ($day) {
+                $daily_revenue[$day] = (isset($daily_revenue[$day]) ? $daily_revenue[$day] : 0) + $amount;
             }
-            $daily_revenue[$date_key] += $amount;
         }
+    } while (count($batch) === 200);
 
-        // Collect recent orders (first 20)
-        if (count($recent_orders) < 20) {
-            $recent_orders[] = array(
-                'id'             => $order->get_id(),
-                'order_number'   => $order->get_order_number(),
-                'status'         => $status,
-                'total'          => $amount,
-                'currency'       => $order->get_currency(),
-                'date'           => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i') : '',
-                'customer'       => $order->get_billing_first_name() . ' ' . $order->get_billing_last_name(),
-                'transaction_id' => $order->get_meta('_telebirr_transaction_id', true),
-            );
-        }
+    // Last 14 days with sales, oldest first
+    ksort($daily_revenue);
+    $daily_revenue = array_slice($daily_revenue, -14, null, true);
+    $daily_labels = array_map(function ($day) {
+        return date_i18n('M d', strtotime($day));
+    }, array_keys($daily_revenue));
+
+    $recent_orders = array();
+    foreach (wc_get_orders($base + array('limit' => 20, 'orderby' => 'date', 'order' => 'DESC')) as $order) {
+        $recent_orders[] = array(
+            'edit_url'       => $order->get_edit_order_url(),
+            'order_number'   => $order->get_order_number(),
+            'status'         => $order->get_status(),
+            'total'          => (float) $order->get_total(),
+            'date'           => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i') : '',
+            'customer'       => $order->get_billing_first_name() . ' ' . $order->get_billing_last_name(),
+            'transaction_id' => $order->get_meta('_telebirr_transaction_id', true),
+        );
     }
 
-    // Ensure daily revenue has last N days
-    $daily_labels = array_keys($daily_revenue);
-    $daily_values = array_values($daily_revenue);
-
-    // Reverse to chronological order (oldest first)
-    $daily_labels = array_reverse($daily_labels);
-    $daily_values = array_reverse($daily_values);
-
-    // Limit to last 14 data points for chart readability
-    $daily_labels = array_slice($daily_labels, -14);
-    $daily_values = array_slice($daily_values, -14);
-
-    $success_count = $completed + $processing;
-    $success_rate = $total_count > 0 ? round(($success_count / $total_count) * 100, 1) : 0;
-    $avg_order = $success_count > 0 ? $total_revenue / $success_count : 0;
+    $success_count = $counts['completed'] + $counts['processing'];
 
     return array(
         'total_revenue'    => $total_revenue,
         'total_count'      => $total_count,
-        'completed'        => $completed,
-        'processing'       => $processing,
-        'pending'          => $pending,
-        'failed'           => $failed,
-        'cancelled'        => $cancelled,
-        'refunded'         => $refunded,
-        'on_hold'          => $on_hold,
-        'success_rate'     => $success_rate,
-        'avg_order'        => $avg_order,
-        'daily_revenue'    => array('labels' => $daily_labels, 'values' => $daily_values),
+        'completed'        => $counts['completed'],
+        'processing'       => $counts['processing'],
+        'pending'          => $counts['pending'],
+        'failed'           => $counts['failed'],
+        'cancelled'        => $counts['cancelled'],
+        'refunded'         => $counts['refunded'],
+        'on_hold'          => $counts['on-hold'],
+        'success_rate'     => $total_count > 0 ? round(($success_count / $total_count) * 100, 1) : 0,
+        'avg_order'        => $success_count > 0 ? $total_revenue / $success_count : 0,
+        'daily_revenue'    => array('labels' => $daily_labels, 'values' => array_values($daily_revenue)),
         'recent_orders'    => $recent_orders,
         'status_breakdown' => array(
-            array('label' => 'Completed',  'value' => $completed,  'color' => '#34C759'),
-            array('label' => 'Processing', 'value' => $processing, 'color' => '#0066B3'),
-            array('label' => 'Pending',    'value' => $pending,    'color' => '#F5A623'),
-            array('label' => 'Failed',     'value' => $failed,     'color' => '#EF4444'),
-            array('label' => 'Cancelled',  'value' => $cancelled,  'color' => '#94A3B8'),
-            array('label' => 'On Hold',    'value' => $on_hold,    'color' => '#8B5CF6'),
-            array('label' => 'Refunded',   'value' => $refunded,   'color' => '#6366F1'),
+            array('label' => 'Completed',  'value' => $counts['completed'],  'color' => '#34C759'),
+            array('label' => 'Processing', 'value' => $counts['processing'], 'color' => '#0066B3'),
+            array('label' => 'Pending',    'value' => $counts['pending'],    'color' => '#F5A623'),
+            array('label' => 'Failed',     'value' => $counts['failed'],     'color' => '#EF4444'),
+            array('label' => 'Cancelled',  'value' => $counts['cancelled'],  'color' => '#94A3B8'),
+            array('label' => 'On Hold',    'value' => $counts['on-hold'],    'color' => '#8B5CF6'),
+            array('label' => 'Refunded',   'value' => $counts['refunded'],   'color' => '#6366F1'),
         ),
     );
 }
@@ -1729,7 +1584,7 @@ function wc_telebirr_render_dashboard() {
                     <?php foreach ($metrics['recent_orders'] as $txn) : ?>
                     <tr>
                         <td>
-                            <a href="<?php echo esc_url(admin_url('post.php?post=' . $txn['id'] . '&action=edit')); ?>">
+                            <a href="<?php echo esc_url($txn['edit_url']); ?>">
                                 <strong>#<?php echo esc_html($txn['order_number']); ?></strong>
                             </a>
                         </td>

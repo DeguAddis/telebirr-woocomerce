@@ -20,14 +20,17 @@ A complete payment gateway integration for Telebirr mobile money service with Wo
 - PHP 7.4+
 - OpenSSL PHP Extension
 - cURL PHP Extension
+- Store currency set to ETB (the gateway is hidden for other currencies)
+- Composer (installs phpseclib for RSA-PSS signing)
 
 ## Installation
 
-1. Upload the `wc-telebirr-payment.php` file to your WordPress plugins directory (`wp-content/plugins/`)
-2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Go to WooCommerce → Settings → Payments
-4. Enable "Telebirr" payment method
-5. Click "Manage" to configure your API credentials
+1. Copy the whole `wc-telebirr-payment` folder to `wp-content/plugins/`
+2. In that folder run `composer install --no-dev` (or upload a copy that already has `vendor/`)
+3. Activate the plugin through the 'Plugins' menu in WordPress
+4. Go to WooCommerce → Settings → Payments
+5. Enable "Telebirr" payment method
+6. Click "Manage" to configure your API credentials
 
 ## Configuration
 
@@ -47,9 +50,10 @@ A complete payment gateway integration for Telebirr mobile money service with Wo
 
 ## Webhook Configuration
 
-Set your notification URL in Telebirr merchant portal to:
+The plugin sends its notification URL to Telebirr with every order. It is:
 ```
-https://your-domain.com/wc-api/telebirr_callback
+https://your-domain.com/wc-api/telebirr_callback        (pretty permalinks)
+https://your-domain.com/?wc-api=telebirr_callback       (plain permalinks)
 ```
 
 ## Order Flow
@@ -64,12 +68,16 @@ https://your-domain.com/wc-api/telebirr_callback
 
 ## Supported Payment Statuses
 
-| Status Code | Description | WooCommerce Status |
-|-------------|-------------|--------------------|
-| 1 | Payment Pending | Pending |
-| 2 | Payment Successful | Processing/Completed |
-| 3 | Payment Failed | Failed |
-| 4 | Payment Cancelled | Cancelled |
+Telebirr's notify callback sends `trade_status` as a word (portal docs, "Step 7: Notify"):
+
+| trade_status | Meaning (per Telebirr) | WooCommerce result |
+|--------------|------------------------|--------------------|
+| Completed | Payment completed | Processing/Completed (after amount check) |
+| Paying / Pending | Paid, not yet settled | Stays Pending |
+| Failure | Payment failed | Failed |
+| Expired / other | Not definitive | Logged only |
+
+Notices other than Completed never change an order that is already paid, and are ignored if they carry no `notify_time`.
 
 ## Troubleshooting
 
@@ -87,6 +95,13 @@ https://your-domain.com/wc-api/telebirr_callback
    - Confirm webhook URL is correctly set in Telebirr portal
    - Check WordPress permalink settings
    - Verify your server accepts incoming POST requests
+
+## Self-check
+
+From the WordPress root:
+```
+wp eval-file "$PWD/wp-content/plugins/wc-telebirr-payment/tests/selfcheck.php"
+```
 
 ## Changelog
 

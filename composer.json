@@ -1,0 +1,10 @@
+{
+    "name": "deguaddis/wc-telebirr-payment",
+    "description": "Telebirr payment gateway for WooCommerce",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=7.4",
+        "phpseclib/phpseclib": "^3.0"
+    }
+}
